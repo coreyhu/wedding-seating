@@ -1,21 +1,24 @@
 import '@fontsource/fraunces/600.css';
-import { assignSeat, listGuests, unseatGuest } from '../shared/api';
+import { assignSeat, listGuests, listTables, setTableLabel, unseatGuest } from '../shared/api';
 import { mountFloorplan, type Floorplan } from '../shared/floorplan';
 import { toast } from '../shared/toast';
 import { requireAuth } from './auth';
 import { mountImport } from './import';
 import * as sm from '../logic/seat-actions';
-import { seatKey, type Guest, type SeatKey } from '../shared/types';
+import { seatKey, type Guest, type SeatKey, type TableInfo } from '../shared/types';
 
 let fp: Floorplan;
 let guests: Guest[] = [];
+let tables: TableInfo[] = [];
 let mode: sm.Mode = sm.idle;
 const bySeat = new Map<SeatKey, Guest>();
 const panel = () => document.querySelector<HTMLElement>('#panel')!;
 const nameOf = (g: Guest) => [g.name_en, g.name_zh].filter(Boolean).join(' · ');
 
 async function refresh(): Promise<void> {
-  try { guests = await listGuests(); } catch { return toast('Load failed', { retry: refresh }); }
+  try { guests = await listGuests(); tables = await listTables(); }
+  catch { return toast('Load failed', { retry: refresh }); }
+  fp.setTableLabels(Object.fromEntries(tables.map(tb => [tb.table_no, tb.label_en])));
   bySeat.clear();
   fp.clearSeatLabels();
   document.querySelectorAll('.seat.occupied').forEach(e => e.classList.remove('occupied'));
@@ -115,9 +118,43 @@ function step(s: sm.Step): void {
   void runCommand(s.command);
 }
 
+function openTableEditor(tableNo: number): void {
+  mode = sm.idle;             // closes any open seat panel state
+  renderMode();               // hides panel, clears highlight
+  const tb = tables.find(x => x.table_no === tableNo);
+  const p = panel();
+  p.hidden = false;
+  p.replaceChildren();
+  const title = document.createElement('p');
+  const strong = document.createElement('strong');
+  strong.textContent = `Table ${tableNo} name`;
+  title.append(strong);
+  const en = document.createElement('input');
+  en.placeholder = 'English name (empty = default)';
+  en.value = tb && tb.label_en !== `Table ${tableNo}` ? tb.label_en : '';
+  const zh = document.createElement('input');
+  zh.placeholder = '中文名 (empty = default)';
+  zh.value = tb && tb.label_zh !== `${tableNo}号桌` ? tb.label_zh : '';
+  const save = document.createElement('button');
+  save.textContent = 'Save';
+  save.onclick = async () => {
+    try { await setTableLabel(tableNo, en.value, zh.value); }
+    catch (e) { return toast(e instanceof Error ? e.message : 'Failed'); }
+    p.hidden = true;
+    await refresh();
+  };
+  const close = document.createElement('button');
+  close.textContent = 'Close';
+  close.onclick = () => { p.hidden = true; };
+  p.append(title, en, zh, document.createElement('br'), save, close);
+}
+
 requireAuth(() => {
   fp = mountFloorplan(document.querySelector('#map')!);
-  fp.onSeatTap(key => step(sm.tapSeat(mode, key, bySeat.get(key)?.id ?? null)));
+  fp.onTap(hit => {
+    if (hit.kind === 'seat') return step(sm.tapSeat(mode, hit.key, bySeat.get(hit.key)?.id ?? null));
+    if (mode.kind !== 'picking-dest') openTableEditor(hit.tableNo);
+  });
   mountImport(document.querySelector('#import')!, refresh);
   void refresh();
 });

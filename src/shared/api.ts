@@ -24,6 +24,9 @@ export const unseatGuest = async (guestId: string): Promise<void> => {
 };
 export const importGuests = async (rows: { name_en: string; name_zh: string }[]): Promise<number> =>
   unwrap(await supabase.rpc('import_guests', { rows }));
+export const setTableLabel = async (tableNo: number, labelEn: string, labelZh: string): Promise<void> => {
+  unwrap(await supabase.rpc('set_table_label', { p_table_no: tableNo, p_label_en: labelEn, p_label_zh: labelZh }));
+};
 export const signIn = async (email: string, password: string): Promise<void> => {
   // Not routed through unwrap(): auth-js's error-branch `data` is an object of
   // null-valued fields (RequestResultSafeDestructure), not `null` itself, so it

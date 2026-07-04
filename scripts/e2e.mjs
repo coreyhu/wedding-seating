@@ -1,4 +1,4 @@
-// E2E regression suite (18 checks): guest search/highlight/toast-retry/eggs, host login/assign/swap/unseat.
+// E2E regression suite (20 checks): guest search/highlight/toast-retry/eggs, host login/assign/swap/unseat/table-rename.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // Host-page mutations are reverted at the end; safe against the seed data.
@@ -126,6 +126,34 @@ await page.click('#unseat');
 await page.waitForFunction(sel => !document.querySelector(sel)?.classList.contains('occupied'), 'svg [id="seat-5-1"]', { timeout: 5000 });
 const unseatedFinal = Number(await page.textContent('#unseated-count'));
 check('host: unseat restores state', unseatedFinal === unseatedBefore, `unseated back to ${unseatedFinal}`);
+
+// rename table 1 (it has seeded guests, so the guest banner can be checked)
+await page.locator('svg [id="table-1-shape"]').click({ force: true });
+await page.waitForSelector('#panel:not([hidden])');
+await page.locator('#panel input').first().fill('Fern');
+await page.locator('#panel input').nth(1).fill('蕨');
+await page.locator('#panel button', { hasText: 'Save' }).click();
+await page.waitForFunction(() =>
+  [...document.querySelectorAll('.table-label')].some(t => t.textContent === 'Fern'), null, { timeout: 5000 });
+check('tables: rename renders on host map', true);
+
+// guest banner shows the custom name only (name-only display rule)
+const guestPage2 = await ctx.newPage();
+await guestPage2.goto(BASE + '/');
+await guestPage2.fill('#q', 'carol zhao');
+await guestPage2.waitForSelector('#banner:not([hidden])', { timeout: 5000 });
+const bannerTxt = await guestPage2.textContent('#banner');
+check('tables: guest banner shows custom name, no number', /Fern/.test(bannerTxt) && !/Table 1/.test(bannerTxt));
+await guestPage2.close();
+
+// restore defaults (also exercises empty-restores-default)
+await page.locator('svg [id="table-1-shape"]').click({ force: true });
+await page.waitForSelector('#panel:not([hidden])');
+await page.locator('#panel input').first().fill('');
+await page.locator('#panel input').nth(1).fill('');
+await page.locator('#panel button', { hasText: 'Save' }).click();
+await page.waitForFunction(() =>
+  ![...document.querySelectorAll('.table-label')].some(t => t.textContent === 'Fern'), null, { timeout: 5000 });
 
 await browser.close();
 const failed = results.filter(r => !r.ok);

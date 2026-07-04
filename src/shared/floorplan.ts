@@ -13,7 +13,7 @@ export interface Floorplan {
   zoomToSeat(key: SeatKey): void;
   zoomToPoint(cx: number, cy: number): void;
   zoomToLandmark(id: string): void;
-  onSeatTap(cb: (key: SeatKey) => void): void;
+  onTap(cb: (hit: { kind: 'seat'; key: SeatKey } | { kind: 'table'; tableNo: number }) => void): void;
   setTableLabels(labels: Record<number, string>): void;
 }
 
@@ -81,10 +81,13 @@ export function mountFloorplan(container: HTMLElement,
       const lm = seatMap.landmarks[id];
       if (lm) zoomToPoint(lm.cx, lm.cy);
     },
-    onSeatTap(cb) {
+    onTap(cb) {
       svg.addEventListener('click', e => {
-        const hit = (e.target as Element).closest('[id^="seat-"]');
-        if (hit) cb(hit.id.slice('seat-'.length));
+        const seat = (e.target as Element).closest('[id^="seat-"]');
+        if (seat) return cb({ kind: 'seat', key: seat.id.slice('seat-'.length) });
+        const table = (e.target as Element).closest('[id^="table-"]');
+        const m = table?.id.match(/^table-(\d+)/);
+        if (m) cb({ kind: 'table', tableNo: Number(m[1]) });
       });
     },
     setTableLabels(labels) {

@@ -104,5 +104,25 @@ begin
   exception when insufficient_privilege then reset role;
   end;
 end $$;
+do $$
+begin
+  perform set_table_label(3, 'Fern', '蕨');
+  assert (select label_zh from tables where table_no = 3) = '蕨', 'label set';
+  perform set_table_label(3, '', '');
+  assert (select label_en from tables where table_no = 3) = 'Table 3', 'empty restores default';
+end $$;
+
+do $$
+begin
+  perform set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222"}', true);
+  begin
+    perform set_table_label(1, 'x', 'x');
+    raise exception 'non-admin renamed a table — gate broken';
+  exception when others then
+    if sqlerrm not like '%not authorized%' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111"}', true);
+end $$;
+
 rollback;
 select 'SMOKE OK' as result;

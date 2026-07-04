@@ -42,9 +42,16 @@ it('occupied toggling and labels', () => {
 it('delegates seat taps', () => {
   const fp = mount();
   const cb = vi.fn();
-  fp.onSeatTap(cb);
+  fp.onTap(cb);
   fp.seatEl('1-2')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  expect(cb).toHaveBeenCalledWith('1-2');
+  expect(cb).toHaveBeenCalledWith({ kind: 'seat', key: '1-2' });
+});
+it('delegates table taps', () => {
+  const fp = mount();
+  const cb = vi.fn();
+  fp.onTap(cb);
+  container.querySelector('#table-1-shape')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  expect(cb).toHaveBeenCalledWith({ kind: 'table', tableNo: 1 });
 });
 it('zoomToLandmark and zoomToPoint are safe no-ops without panZoom', () => {
   const fp = mount();
