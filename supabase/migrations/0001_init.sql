@@ -27,6 +27,16 @@ create policy guests_read_auth on guests for select to authenticated using (true
 -- deliberately NO anon policy on guests; also revoke to fail loudly:
 revoke all on guests from anon;
 
+-- admin allowlist: signups are disabled in config, and write RPCs additionally
+-- require the caller's uid to be in this table (the anon key is public by
+-- design, so "any authenticated user" is not a sufficient gate).
+create table admins (user_id uuid primary key);
+alter table admins enable row level security;  -- no policies: not readable/writable via API
+
+create or replace function is_admin() returns boolean
+language sql stable security definer set search_path = public as
+$$ select exists (select 1 from admins where user_id = auth.uid()) $$;
+
 create or replace function normalize_en(s text) returns text
 language sql immutable as $$
   select lower(regexp_replace(unaccent(coalesce(s, '')), '\s', '', 'g'))
@@ -62,7 +72,7 @@ declare
   v_occupant uuid;
   v_old_table int; v_old_seat int;
 begin
-  if auth.uid() is null then raise exception 'not authorized'; end if;
+  if not is_admin() then raise exception 'not authorized'; end if;
   set constraints guests_one_per_seat deferred;
   select g.table_no, g.seat_no into v_old_table, v_old_seat from guests g where g.id = p_guest_id;
   if not found then raise exception 'unknown guest'; end if;
@@ -77,7 +87,7 @@ end $$;
 create or replace function unseat(p_guest_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if auth.uid() is null then raise exception 'not authorized'; end if;
+  if not is_admin() then raise exception 'not authorized'; end if;
   update guests set table_no = null, seat_no = null where id = p_guest_id;
 end $$;
 
@@ -85,7 +95,7 @@ create or replace function import_guests(rows jsonb)
 returns int language plpgsql security definer set search_path = public as $$
 declare v_count int;
 begin
-  if auth.uid() is null then raise exception 'not authorized'; end if;
+  if not is_admin() then raise exception 'not authorized'; end if;
   insert into guests (name_en, name_zh)
   select trim(coalesce(r->>'name_en', '')), trim(coalesce(r->>'name_zh', ''))
   from jsonb_array_elements(rows) r
