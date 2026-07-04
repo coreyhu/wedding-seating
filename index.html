@@ -8,7 +8,15 @@
 </head>
 <body>
   <header class="topbar"><h1>Find your seat · 查找您的座位</h1></header>
-  <main id="app"></main>
+  <main class="guest">
+    <div class="searchbar">
+      <input id="q" type="search" autocomplete="off"
+        placeholder="Your name (English or 中文) · 输入您的姓名" />
+    </div>
+    <div id="results" class="results"></div>
+    <div id="banner" class="banner" hidden></div>
+    <div id="map" class="map"></div>
+  </main>
   <script type="module" src="/src/guest/main.ts"></script>
 </body>
 </html>
