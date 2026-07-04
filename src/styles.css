@@ -15,11 +15,6 @@ body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(-
   border-radius: 999px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
 .signout { border: 0; background: none; color: var(--muted); }
 
-.guest { display: flex; flex-direction: column; gap: 10px; padding: 12px; max-width: 720px; margin: 0 auto; }
-.searchbar input { width: 100%; font-size: 18px; padding: 13px 16px; border: 1px solid var(--line);
-  border-radius: 999px; background: #fff; color: var(--ink); }
-.searchbar input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
-.results { display: flex; flex-direction: column; gap: 6px; }
 .card { display: flex; justify-content: space-between; gap: 8px; padding: 12px 16px; font-size: 16px;
   background: #fff; border: 1px solid var(--line); border-radius: var(--radius); text-align: left;
   box-shadow: var(--shadow); cursor: pointer; }
@@ -33,7 +28,19 @@ body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(-
   border: 1px solid var(--accent); border-radius: var(--radius); text-align: center;
   font-family: var(--serif); font-size: 17px; color: var(--accent-deep); box-shadow: var(--shadow); }
 .empty { color: var(--muted); text-align: center; padding: 8px; }
-.divider { text-align: center; color: var(--accent); font-size: 13px; letter-spacing: 0.5em; padding: 2px 0; }
+
+.guest-mapfirst { position: relative; }
+.map.mapfull { position: fixed; inset: 0; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+.overlay { position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  width: min(560px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 8px;
+  padding-top: 10px; z-index: 10; pointer-events: none; max-height: 100dvh; }
+.overlay > *, .overlay .results > * { pointer-events: auto; }
+.panel-card { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); }
+.overlay .topbar { border-bottom: 1px solid var(--line); padding: 10px 14px; }
+.overlay .searchbar { padding: 6px; }
+.overlay .searchbar input { border: 0; outline: none; width: 100%; font-size: 16px; padding: 8px 10px; background: transparent; }
+.overlay .searchbar:focus-within { outline: 2px solid var(--accent); }
+.results { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 40vh; }
 
 .map { position: relative; height: 60vh; background: #fff; border: 1px solid var(--line);
   border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }

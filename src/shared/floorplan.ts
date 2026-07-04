@@ -40,14 +40,44 @@ export function mountFloorplan(container: HTMLElement,
     ? svgPanZoom(svg, { minZoom: 0.8, maxZoom: 12, zoomScaleSensitivity: 0.35, dblClickZoomEnabled: false })
     : null;
 
+  if (pz) {
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { pz!.resize(); pz!.fit(); pz!.center(); }, 150);
+    });
+  }
+
   const seatEl = (key: SeatKey) => svg.querySelector<SVGGraphicsElement>(`#seat-${escapeId(key)}`)
     ?? svg.querySelector<SVGGraphicsElement>(`[id="seat-${key}"]`);
 
-  const zoomToPoint = (cx: number, cy: number) => {
+  let zoomAnim = 0;
+  const zoomToPoint = (cx: number, cy: number): void => {
     if (!pz) return;
-    pz.zoom(5);
+    cancelAnimationFrame(zoomAnim);
     const { width, height, realZoom } = pz.getSizes();
-    pz.pan({ x: width / 2 - cx * realZoom, y: height / 2 - cy * realZoom });
+    const startZoom = pz.getZoom();
+    const startPan = pz.getPan();
+    const startCenter = { x: (width / 2 - startPan.x) / realZoom, y: (height / 2 - startPan.y) / realZoom };
+    const targetZoom = 5;
+    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const apply = (z: number, c: { x: number; y: number }) => {
+      pz!.zoom(z);
+      const rz = pz!.getSizes().realZoom;
+      pz!.pan({ x: width / 2 - c.x * rz, y: height / 2 - c.y * rz });
+    };
+    if (reduced || typeof requestAnimationFrame !== 'function') return apply(targetZoom, { x: cx, y: cy });
+    const t0 = performance.now();
+    const DURATION = 600;
+    const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    const frame = (now: number) => {
+      const t = Math.min(1, (now - t0) / DURATION);
+      const k = ease(t);
+      apply(startZoom + (targetZoom - startZoom) * k,
+        { x: startCenter.x + (cx - startCenter.x) * k, y: startCenter.y + (cy - startCenter.y) * k });
+      if (t < 1) zoomAnim = requestAnimationFrame(frame);
+    };
+    zoomAnim = requestAnimationFrame(frame);
   };
 
   return {

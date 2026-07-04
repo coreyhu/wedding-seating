@@ -66,3 +66,7 @@ it('setTableLabels draws above the table and replaces on re-call', () => {
   expect(els[0]!.textContent).toBe('蕨');
   expect(Number(els[0]!.getAttribute('y'))).toBeLessThan(40); // cy 50 - r 10 - 6
 });
+it('animated zoomToPoint stays a safe no-op without panZoom and cancels cleanly', () => {
+  const fp = mount();
+  expect(() => { fp.zoomToPoint(1, 2); fp.zoomToPoint(3, 4); }).not.toThrow();
+});

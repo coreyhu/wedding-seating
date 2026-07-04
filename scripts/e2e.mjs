@@ -1,4 +1,4 @@
-// E2E regression suite (22 checks): guest search/highlight/toast-retry/eggs, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
+// E2E regression suite (23 checks): guest search/highlight/toast-retry/eggs/layout, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // Host-page mutations are reverted at the end; safe against the seed data.
@@ -71,6 +71,10 @@ check('i18n: zh-CN browser lands on Chinese', (await zhPage.getAttribute('#q', '
 await zhPage.click('#lang-toggle');
 check('i18n: toggle switches to English live', (await zhPage.getAttribute('#q', 'placeholder')).includes('Your name'));
 await zhCtx.close();
+
+const mapBox = await page.locator('#map').boundingBox();
+const vp = page.viewportSize();
+check('layout: map fills the viewport', mapBox.width >= vp.width - 2 && mapBox.height >= vp.height - 2);
 
 // ---------- HOST PAGE ----------
 await page.goto(BASE + '/host.html');
