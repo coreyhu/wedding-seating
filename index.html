@@ -3,16 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Find your seat · 查找您的座位</title>
+  <title>Find your seat</title>
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
-  <header class="topbar"><h1>Find your seat · 查找您的座位</h1></header>
+  <header class="topbar">
+    <h1><span class="leaf" aria-hidden="true">✿</span>Find your seat</h1>
+    <button id="lang-toggle" class="lang-toggle">中文</button>
+  </header>
   <main class="guest">
     <div class="searchbar">
       <input id="q" type="search" autocomplete="off"
         placeholder="Your name (English or 中文) · 输入您的姓名" />
     </div>
+    <div class="divider" aria-hidden="true">✿ ❀ ✿</div>
     <div id="results" class="results"></div>
     <div id="banner" class="banner" hidden></div>
     <div id="map" class="map"></div>

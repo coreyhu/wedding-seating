@@ -1,3 +1,4 @@
+import '@fontsource/fraunces/600.css';
 import { searchGuests } from '../shared/api';
 import { mountFloorplan } from '../shared/floorplan';
 import { dismissToast, toast } from '../shared/toast';

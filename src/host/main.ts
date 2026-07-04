@@ -1,3 +1,4 @@
+import '@fontsource/fraunces/600.css';
 import { assignSeat, listGuests, unseatGuest } from '../shared/api';
 import { mountFloorplan, type Floorplan } from '../shared/floorplan';
 import { toast } from '../shared/toast';
@@ -14,7 +15,7 @@ const panel = () => document.querySelector<HTMLElement>('#panel')!;
 const nameOf = (g: Guest) => [g.name_en, g.name_zh].filter(Boolean).join(' · ');
 
 async function refresh(): Promise<void> {
-  try { guests = await listGuests(); } catch { return toast('Load failed · 加载失败', { retry: refresh }); }
+  try { guests = await listGuests(); } catch { return toast('Load failed', { retry: refresh }); }
   bySeat.clear();
   fp.clearSeatLabels();
   document.querySelectorAll('.seat.occupied').forEach(e => e.classList.remove('occupied'));
@@ -41,7 +42,7 @@ async function runCommand(c: sm.Command): Promise<void> {
   try {
     if (c.type === 'assign') await assignSeat(c.guestId, c.seat);
     if (c.type === 'unseat') await unseatGuest(c.guestId);
-  } catch (e) { toast(e instanceof Error ? e.message : 'Failed · 操作失败'); }
+  } catch (e) { toast(e instanceof Error ? e.message : 'Failed'); }
   if (c.type !== 'none') await refresh();
 }
 
@@ -52,8 +53,8 @@ function renderMode(): void {
   p.hidden = false;
   if (mode.kind === 'picking-dest') {
     fp.highlight(mode.fromSeat);
-    p.innerHTML = `<p>Tap the destination chair — occupied chairs swap. · 点击目标座位（有人则交换）</p>
-      <button id="cancel">Cancel · 取消</button>`;
+    p.innerHTML = `<p>Tap the destination chair — occupied chairs swap.</p>
+      <button id="cancel">Cancel</button>`;
   } else {
     fp.highlight(mode.seat);
     const occupantId = mode.occupantId;
@@ -73,17 +74,17 @@ function renderMode(): void {
       name.textContent = nameOf(g);
       info.append(name, ` — seat ${mode.seat}`);
       p.replaceChildren(info,
-        btn('move', 'Move / Swap · 移动'), ' ',
-        btn('unseat', 'Unseat · 取消座位'), ' ',
-        btn('cancel', 'Close · 关闭'));
+        btn('move', 'Move / Swap'), ' ',
+        btn('unseat', 'Unseat'), ' ',
+        btn('cancel', 'Close'));
     } else {
-      info.textContent = `Empty seat ${mode.seat} · 空位 — pick a guest below or from the unseated list`;
+      info.textContent = 'Empty seat — pick a guest below or from the unseated list';
       const filter = document.createElement('input');
       filter.id = 'pick-filter';
-      filter.placeholder = 'Filter unseated · 筛选';
+      filter.placeholder = 'Filter unseated';
       const list = document.createElement('div');
       list.id = 'pick-list';
-      p.replaceChildren(info, filter, list, btn('cancel', 'Close · 关闭'));
+      p.replaceChildren(info, filter, list, btn('cancel', 'Close'));
       renderPickList('');
     }
     p.querySelector('#pick-filter')?.addEventListener('input', e =>

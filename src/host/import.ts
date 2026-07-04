@@ -4,8 +4,8 @@ import { parseGuestCsv } from '../logic/csv';
 
 export function mountImport(el: HTMLElement, onDone: () => void): void {
   el.innerHTML = `
-    <p>Export the Google Sheet as CSV (two columns: English, 中文) and paste it here.</p>
-    <textarea id="csv" rows="6" placeholder="Carol Zhao,赵卡罗"></textarea>
+    <p>Export the Google Sheet as CSV (two columns: English name, Chinese name) and paste it here.</p>
+    <textarea id="csv" rows="6" placeholder="Carol Zhao,Zhao Ka Luo"></textarea>
     <div id="csv-preview"></div>
     <button id="csv-go" disabled>Import</button>`;
   const ta = el.querySelector<HTMLTextAreaElement>('#csv')!;
