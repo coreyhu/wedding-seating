@@ -8,7 +8,8 @@ plus the loop you'll re-run whenever the floorplan or guest list changes.
 1. In the [Supabase dashboard](https://supabase.com/dashboard), create a new project
    (pick a region close to the venue/guests). Note the **project ref** (the
    `<ref>` in `https://<ref>.supabase.co`).
-2. Link the local repo to it and push the schema:
+2. Link the local repo to it and push the schema (first time only: run
+   `supabase login` before `link` — it opens a browser to authorize the CLI):
 
    ```sh
    supabase link --project-ref <ref>
@@ -74,6 +75,12 @@ URL could otherwise create an account. Before adding the real host user:
    Get both from the hosted project's **Settings → API** page (not from
    `.env.local` — that file is gitignored and only has the local `supabase
    status` values, e.g. `127.0.0.1:54321`).
+
+   ⚠️ Vite bakes `VITE_*` values in at **build** time, and Netlify usually
+   auto-builds the moment you import the repo — likely *before* you set these
+   vars. If that happened, trigger a fresh build after setting them
+   (**Deploys → Trigger deploy → Clear cache and deploy site**), or the site
+   ships with blank Supabase config and every search fails.
 3. Deploy. Confirm both `/` (guest search) and `/host.html` (host login)
    load on the live URL, and that host login with the account from step 2.3
    works.
@@ -93,7 +100,15 @@ URL could otherwise create an account. Before adding the real host user:
       `src/generated/floorplan.svg` / `seatmap.json` reflect it — not the
       dev placeholder.
 - [ ] Real guest CSV imported via the host page's Import panel (not the
-      `seed.sql` sample rows).
+      `seed.sql` sample rows). **Check the counts:** the toast's imported
+      number should equal your CSV's row count. Guests are deduplicated by
+      the exact (English, Chinese) name pair, so on a first import into an
+      empty table, any "already existed" count > 0 means your sheet contains
+      two guests with identical names — the second one is silently dropped
+      and can't be seated. Disambiguate in the sheet (e.g. "Wang Wei (uncle)")
+      and re-import. Note there is no in-app edit/delete; fixing a typo means
+      correcting the sheet and re-importing (which adds the corrected name as
+      a new unseated guest — unseat/ignore the old row via SQL if needed).
 - [ ] Spot-check 3 guests from a phone: open the live guest URL, search each
       by name (try one in Chinese), confirm the right seat highlights.
 
