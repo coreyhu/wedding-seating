@@ -29,10 +29,19 @@ begin
 end $$;
 
 do $$
-declare n int;
+declare r jsonb;
 begin
-  select import_guests('[{"name_en":"New Guy","name_zh":"新人"},{"name_en":"Carol Zhao","name_zh":"赵卡罗"},{"name_en":"","name_zh":""}]'::jsonb) into n;
-  assert n = 1, format('import inserts only the new row, got %s', n);
+  select import_seating(jsonb_build_object(
+    'tables', jsonb_build_array(jsonb_build_object('table_no', 1, 'label_en', 'Peacock', 'label_zh', '孔雀')),
+    'guests', jsonb_build_array(
+      jsonb_build_object('name_en', 'Carol Zhao', 'name_zh', '赵卡罗', 'table_no', 4, 'seat_no', 1),
+      jsonb_build_object('name_en', 'Brand New', 'name_zh', '', 'table_no', 4, 'seat_no', 2)
+    ))) into r;
+  assert (r->>'new')::int = 1, 'one new guest';
+  assert (r->>'imported')::int = 2, 'two seated';
+  assert (select label_en from tables where table_no = 1) = 'Peacock', 'label applied';
+  assert (select table_no from guests where name_en = 'Carol Zhao') = 4, 'carol moved by import';
+  assert (select count(*) from guests where name_en = 'Kevin Hu' and table_no is not null) = 0, 'absent guests unseated';
 end $$;
 
 -- an authenticated user who is NOT in admins must not be able to write
@@ -54,8 +63,8 @@ begin
     if sqlerrm <> 'not authorized' then raise; end if;
   end;
   begin
-    perform import_guests('[{"name_en":"Intruder","name_zh":""}]'::jsonb);
-    raise exception 'non-admin wrote via import_guests — is_admin gate broken';
+    perform import_seating(jsonb_build_object('tables', '[]'::jsonb, 'guests', '[]'::jsonb));
+    raise exception 'non-admin wrote via import_seating — is_admin gate broken';
   exception when raise_exception then
     if sqlerrm <> 'not authorized' then raise; end if;
   end;
@@ -88,8 +97,8 @@ begin
     'anon cannot execute assign_seat';
   assert not has_function_privilege('anon', 'unseat(uuid)', 'execute'),
     'anon cannot execute unseat';
-  assert not has_function_privilege('anon', 'import_guests(jsonb)', 'execute'),
-    'anon cannot execute import_guests';
+  assert not has_function_privilege('anon', 'import_seating(jsonb)', 'execute'),
+    'anon cannot execute import_seating';
   assert has_function_privilege('authenticated', 'assign_seat(uuid,int,int)', 'execute'),
     'authenticated can execute assign_seat';
 end $$;

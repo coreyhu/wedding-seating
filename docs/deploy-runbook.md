@@ -16,8 +16,8 @@ plus the loop you'll re-run whenever the floorplan or guest list changes.
    supabase db push
    ```
 
-   This applies `supabase/migrations/0001_init.sql` — tables, RLS policies,
-   `is_admin()`, and the write RPCs (`assign_seat`, `unseat`, `import_guests`,
+   This applies all of `supabase/migrations/` — tables, RLS policies,
+   `is_admin()`, and the write RPCs (`assign_seat`, `unseat`, `import_seating`,
    `search_guests`).
 
 3. Open the hosted **SQL Editor** and run **only the `tables` insert** from
@@ -59,7 +59,7 @@ URL could otherwise create an account. Before adding the real host user:
    insert into admins (user_id) values ('<that user''s uuid>');
    ```
 
-   Every write RPC (`assign_seat`, `unseat`, `import_guests`) checks
+   Every write RPC (`assign_seat`, `unseat`, `import_seating`) checks
    `is_admin()` against this table. Skip this step and the host page loads
    fine but every assign/move/swap/import fails with `not authorized`.
 
@@ -99,18 +99,22 @@ URL could otherwise create an account. Before adding the real host user:
       against the actual venue export (see the floorplan loop below), and
       `src/generated/floorplan.svg` / `seatmap.json` reflect it — not the
       dev placeholder.
-- [ ] Real guest CSV imported via the host page's Import panel (not the
-      `seed.sql` sample rows). **Check the counts:** the toast's imported
-      number should equal your CSV's row count. Guests are deduplicated by
-      the exact (English, Chinese) name pair, so on a first import into an
-      empty table, any "already existed" count > 0 means your sheet contains
-      two guests with identical names — the second one is silently dropped
-      and can't be seated. Disambiguate in the sheet (e.g. "Wang Wei (uncle)")
-      and re-import. Note there is no in-app edit/delete; fixing a typo means
-      correcting the sheet and re-importing (which adds the corrected name as
-      a new unseated guest — unseat/ignore the old row via SQL if needed).
-- [ ] Spot-check 3 guests from a phone: open the live guest URL, search each
-      by name (try one in Chinese), confirm the right seat highlights.
+- [ ] Real seating matrix imported via the host page's Import panel (not the
+      `seed.sql` sample rows): export the Google Sheet as CSV — the whole
+      sheet (row 1 = the 12 table names, each column below a table, each row
+      a seat) — and paste the entire thing into the panel, not just a range.
+      The preview must show **12 tables** and the guest count you expect from
+      the sheet before the Import button enables. If the panel shows errors
+      instead (wrong header count, a column with more than 8 guests, an
+      in-sheet duplicate name), the list explains what to fix — correct the
+      Sheet and re-paste; the button stays disabled until `errors` is empty.
+      Import is **full-replace**: whatever the sheet says becomes the seating
+      truth on every import, so re-import any time the sheet changes — but
+      note any table renames or seat moves made on the host map since the
+      last import are overwritten by design (the sheet wins), so do map
+      touch-ups *after* the last import of the day, not before. Guests absent
+      from the sheet are unseated, never deleted. After importing, spot-check
+      one guest from each side of the room to confirm they land correctly.
 
 ## Floorplan re-export loop (for future edits, e.g. Task 14)
 

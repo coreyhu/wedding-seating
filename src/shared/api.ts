@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Guest, GuestMatch, SeatKey, TableInfo } from './types';
 import { parseSeatKey } from './types';
+import type { MatrixGuest, MatrixTable } from '../logic/matrix';
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
@@ -22,8 +23,9 @@ export const assignSeat = async (guestId: string, seat: SeatKey): Promise<void> 
 export const unseatGuest = async (guestId: string): Promise<void> => {
   unwrap(await supabase.rpc('unseat', { p_guest_id: guestId }));
 };
-export const importGuests = async (rows: { name_en: string; name_zh: string }[]): Promise<number> =>
-  unwrap(await supabase.rpc('import_guests', { rows }));
+export const importSeating = async (payload: { tables: MatrixTable[]; guests: MatrixGuest[] }):
+  Promise<{ imported: number; new: number; unseated: number }> =>
+  unwrap(await supabase.rpc('import_seating', { payload }));
 export const setTableLabel = async (tableNo: number, labelEn: string, labelZh: string): Promise<void> => {
   unwrap(await supabase.rpc('set_table_label', { p_table_no: tableNo, p_label_en: labelEn, p_label_zh: labelZh }));
 };
