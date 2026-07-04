@@ -166,7 +166,7 @@ await page.fill('#csv', MATRIX);
 await page.waitForSelector('#csv-go:not([disabled])');
 await page.click('#csv-go');
 await page.waitForSelector('.toast', { timeout: 8000 });
-check('import: matrix toast reports 1 new guest', /1 new/.test(await page.textContent('.toast')));
+check('import: matrix toast reports 8 seats imported', /Imported 8 seats/.test(await page.textContent('.toast')));
 
 const bridgePage = await ctx.newPage();
 await bridgePage.goto(BASE + '/');
