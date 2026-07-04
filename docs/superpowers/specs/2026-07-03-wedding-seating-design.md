@@ -40,15 +40,15 @@ Floorplan SVG: inlined into both pages at build time; chairs addressable by id.
 
 The floorplan SVG (edited in Affinity by the host) is the single source of truth for geometry.
 
-**What the host does in Affinity (final export checklist):**
-1. Name each of the 12 table groups `table-1` … `table-12` in the Layers panel (each group = 8 chair paths + 1 table path, as in the sample). Nothing else needs naming.
+**What the host does in Affinity (final export checklist):** *(✅ completed 2026-07-03 — his v2 export satisfies all of this)*
+1. Name each of the 12 table groups `table-1` … `table-12` in the Layers panel (each group = 8 chair paths + 1 table path, as in the sample). Nothing else needs naming. *(Underscore form `table_1` is also accepted by the pipeline, which is what the v2 export uses.)*
 2. Delete the mockup content from the sample: the enlarged demo table and the hand-placed name labels. The app renders names dynamically.
-3. Keep everything else (embedded JPEG venue map, ceremony chair rows, decoration) — the app treats it as background art.
+3. Keep everything else (venue background art — fully vector as of v2, which replaced the embedded JPEG; ceremony chair rows; decoration) — the app treats it as background art.
 
 **What the build script (`scripts/prepare-svg.ts`) does:**
 - Copies Affinity's `serif:id` attributes to standard `id`.
 - Within each `table-{n}` group, identifies the table (largest shape) vs. the 8 chairs, computes each chair's centroid, and derives seat numbers **1–8 clockwise from the 12 o'clock position**, injecting `id="seat-{table}-{seat}"` on each chair path.
-- Recompresses/rescales the embedded JPEG for mobile payloads.
+- Recompresses/rescales any embedded raster image for mobile payloads (moot as of the v2 all-vector export, but kept as a safety net) and tightens the viewBox to the drawn content.
 - **Fails the build** if any table group is missing, doesn't contain exactly 8 chairs, or — critically — if a re-export would silently renumber existing seats: the derived seat map is committed alongside the SVG and diffed on every build, so a nudged chair can't scramble assignments unnoticed.
 
 ⚑ **Default chosen (awaiting confirmation):** the two 7×6 ceremony chair grids near the Altar are open seating — decoration to the app. Only the 12 reception tables are searchable/assignable.

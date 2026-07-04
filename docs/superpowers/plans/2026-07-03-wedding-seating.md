@@ -292,7 +292,7 @@ export function seatNumbersFor(center: Pt, chairs: Pt[]): number[] {
 
 **Interfaces:**
 - Consumes: `centroid`, `seatNumbersFor` from Task 2.
-- Produces: `interface SeatMap { viewBox: string; tables: Record<string, {cx:number;cy:number;r:number}>; seats: Record<string, {cx:number;cy:number}> }` (keys `"3"` / `"3-5"`), exported from `scripts/svg-transform.ts` and re-exported by `src/shared/types.ts` in Task 5. `transformFloorplan(svgText: string, prevMap: SeatMap | null): { svg: string; seatMap: SeatMap }` — throws descriptive `Error` on violations. Runtime artifacts `src/generated/floorplan.svg` (chair ids injected) and `src/generated/seatmap.json`.
+- Produces: `interface SeatMap { viewBox: string; tables: Record<string, {cx:number;cy:number;r:number}>; seats: Record<string, {cx:number;cy:number}> }` (keys `"3"` / `"3-5"`), exported from `scripts/svg-transform.ts` and re-exported by `src/shared/types.ts` in Task 5. `transformFloorplan(svgText: string, prevMap: SeatMap | null): { svg: string; seatMap: SeatMap }` — throws descriptive `Error` on violations. Table groups are recognized by `id` **or** `serif:id` matching `/^table[-_](\d+)$/` (Corey's real export uses `table_1`). The output viewBox is tightened to the drawn content + 40-unit pad (the Affinity page is far taller than the map). Also produces `pathPoints(d: string): Pt[]` — a path-command walker returning on-curve endpoints; the real export uses relative `l`/`c` commands, so naive number-pairing is NOT valid. Runtime artifacts `src/generated/floorplan.svg` (chair ids injected) and `src/generated/seatmap.json`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -300,10 +300,25 @@ export function seatNumbersFor(center: Pt, chairs: Pt[]): number[] {
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { transformFloorplan, type SeatMap } from './svg-transform';
+import { pathPoints, transformFloorplan, type SeatMap } from './svg-transform';
+import { centroid } from '../src/logic/seat-geometry';
 import { devFloorplanSvg } from './make-dev-floorplan';
 
 const src = devFloorplanSvg();
+
+describe('pathPoints', () => {
+  it('walks absolute commands', () => {
+    expect(pathPoints('M 10 10 L 30 10 L 30 30 L 10 30 Z')).toEqual([
+      { x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 30 }, { x: 10, y: 30 }]);
+  });
+  it('walks a real Affinity chair path (relative l/c commands)', () => {
+    // verbatim from Corey's export: a chair of table 1 near (1552, 1751)
+    const d = 'M1547.242,1743.243l10.2,0l0,17l-10.2,0c-4.694,0 -8.5,-3.806 -8.5,-8.5c0,-4.694 3.806,-8.5 8.5,-8.5Z';
+    const c = centroid(pathPoints(d));
+    expect(c.x).toBeGreaterThan(1540); expect(c.x).toBeLessThan(1560);
+    expect(c.y).toBeGreaterThan(1740); expect(c.y).toBeLessThan(1762);
+  });
+});
 
 describe('transformFloorplan', () => {
   it('injects seat and table ids for 12 tables × 8 chairs', () => {
@@ -313,6 +328,12 @@ describe('transformFloorplan', () => {
     for (let t = 1; t <= 12; t++)
       for (let s = 1; s <= 8; s++) expect(svg).toContain(`id="seat-${t}-${s}"`);
     expect(svg).toContain('id="table-7"');
+  });
+  it('accepts underscore group names and tightens the viewBox', () => {
+    const underscored = src.replace(/table-(\d+)/g, 'table_$1');
+    const { seatMap } = transformFloorplan(underscored, null);
+    expect(Object.keys(seatMap.seats)).toHaveLength(96);
+    expect(seatMap.viewBox).not.toBe('0 0 1500 1200'); // tightened to content
   });
   it('numbers seat 1 at 12 o’clock', () => {
     const { seatMap } = transformFloorplan(src, null);
@@ -388,13 +409,31 @@ export interface SeatMap {
 
 const MOVE_TOLERANCE = 25; // svg units; larger displacement of an existing seat fails the build
 
-// Approximates a path's point cloud by pairing every number in `d`.
-// Valid for absolute-command paths (which Affinity exports); relative
-// h/v/l offsets would skew centroids — the validation tests catch that.
-function coordsOf(d: string): Pt[] {
-  const nums = d.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+// Walks a path's command stream and returns the on-curve endpoint after each
+// command (control points excluded). Affinity exports relative l/c commands
+// after an absolute M, so a real interpreter is required — naive number
+// pairing produces garbage centroids.
+export function pathPoints(d: string): Pt[] {
+  const tokens = d.match(/[a-zA-Z]|-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?/g) ?? [];
   const pts: Pt[] = [];
-  for (let i = 0; i + 1 < nums.length; i += 2) pts.push({ x: nums[i]!, y: nums[i + 1]! });
+  let x = 0, y = 0, sx = 0, sy = 0, i = 0, cmd = '';
+  const num = () => Number(tokens[i++]);
+  while (i < tokens.length) {
+    const t = tokens[i]!;
+    if (/[a-zA-Z]/.test(t)) {
+      cmd = t; i++;
+      if (cmd.toUpperCase() === 'Z') { x = sx; y = sy; continue; }
+    }
+    const rel = cmd === cmd.toLowerCase();
+    const skip = { M: 0, L: 0, T: 0, H: 0, V: 0, C: 4, S: 2, Q: 2, A: 5 }[cmd.toUpperCase()];
+    if (skip === undefined) throw new Error(`unsupported path command '${cmd}'`);
+    for (let k = 0; k < skip; k++) num();       // control points / arc params
+    if (cmd.toUpperCase() === 'H') { const nx = num(); x = rel ? x + nx : nx; }
+    else if (cmd.toUpperCase() === 'V') { const ny = num(); y = rel ? y + ny : ny; }
+    else { const nx = num(), ny = num(); x = rel ? x + nx : nx; y = rel ? y + ny : ny; }
+    if (cmd.toUpperCase() === 'M') { sx = x; sy = y; cmd = rel ? 'l' : 'L'; } // implicit lineto after M
+    pts.push({ x, y });
+  }
   return pts;
 }
 
@@ -409,18 +448,21 @@ export function transformFloorplan(svgText: string, prevMap: SeatMap | null): { 
   if (!svg) throw new Error('not an SVG document');
   const seatMap: SeatMap = { viewBox: svg.getAttribute('viewBox') ?? '', tables: {}, seats: {} };
 
-  const groups = [...doc.querySelectorAll('g')].filter(g =>
-    /^table-\d+$/.test(g.getAttribute('serif:id') ?? g.getAttribute('id') ?? ''));
+  const nameOf = (g: Element) => {
+    const raw = [g.getAttribute('serif:id'), g.getAttribute('id')].find(v => /^table[-_]\d+$/.test(v ?? ''));
+    return raw ?? null;
+  };
+  const groups = [...doc.querySelectorAll('g')].filter(g => nameOf(g) !== null);
   if (groups.length !== 12)
-    throw new Error(`expected 12 table groups, found ${groups.length} (${groups.map(g => g.getAttribute('serif:id') ?? g.getAttribute('id')).join(', ')})`);
+    throw new Error(`expected 12 table groups, found ${groups.length} (${groups.map(nameOf).join(', ')})`);
 
   for (const g of groups) {
-    const name = g.getAttribute('serif:id') ?? g.getAttribute('id')!;
-    const t = Number(name.slice('table-'.length));
+    const name = nameOf(g)!;
+    const t = Number(name.match(/^table[-_](\d+)$/)![1]);
     const paths = [...g.querySelectorAll('path')];
     if (paths.length !== 9)
       throw new Error(`${name}: expected 1 table + 8 chairs (9 paths), found ${paths.length} — check the group in Affinity`);
-    const withPts = paths.map(p => ({ p, pts: coordsOf(p.getAttribute('d') ?? '') }));
+    const withPts = paths.map(p => ({ p, pts: pathPoints(p.getAttribute('d') ?? '') }));
     withPts.sort((a, b) => bboxArea(b.pts) - bboxArea(a.pts));
     const [table, ...chairs] = withPts;
     if (chairs.length !== 8) throw new Error(`${name}: expected 8 chairs`);
@@ -437,6 +479,15 @@ export function transformFloorplan(svgText: string, prevMap: SeatMap | null): { 
       seatMap.seats[`${t}-${nums[i]}`] = { cx: chairCentroids[i]!.x, cy: chairCentroids[i]!.y };
     });
   }
+
+  // Tighten viewBox: the Affinity page is much taller than the drawn map.
+  const all = [...doc.querySelectorAll('path')].flatMap(p => pathPoints(p.getAttribute('d') ?? ''));
+  const xs2 = all.map(p => p.x), ys2 = all.map(p => p.y);
+  const PAD = 40;
+  const minX = Math.min(...xs2) - PAD, minY = Math.min(...ys2) - PAD;
+  svg.setAttribute('viewBox',
+    [minX, minY, Math.max(...xs2) + PAD - minX, Math.max(...ys2) + PAD - minY].map(Math.round).join(' '));
+  seatMap.viewBox = svg.getAttribute('viewBox')!;
 
   if (prevMap) {
     const problems: string[] = [];
@@ -466,7 +517,7 @@ import sharp from 'sharp';
 import { transformFloorplan, type SeatMap } from './svg-transform';
 
 const force = process.argv.includes('--force');
-const src = process.argv.find(a => a.endsWith('.svg')) ?? 'assets/floorplan/dev-floorplan.svg';
+const src = process.argv.find(a => a.endsWith('.svg')) ?? 'assets/floorplan/venue.svg';
 const MAP = 'src/generated/seatmap.json';
 
 async function recompressJpeg(svg: string): Promise<string> {
@@ -488,14 +539,19 @@ writeFileSync(MAP, JSON.stringify(seatMap, null, 1));
 console.log(`ok: ${Object.keys(seatMap.seats).length} seats across ${Object.keys(seatMap.tables).length} tables from ${src}`);
 ```
 
-- [ ] **Step 7: Generate and verify artifacts**
+- [ ] **Step 7: Generate and verify artifacts — against the REAL floorplan**
+
+Corey's updated export already satisfies the contract (12 × 9-path groups named `table_1`…`table_12`), so the real file is the source from day one; the dev fixture exists only for unit tests.
 
 ```bash
-npm run devmap
-npm run svg
-grep -c 'id="seat-' src/generated/floorplan.svg   # expect 96
+cp seating_affinity.svg assets/floorplan/venue.svg
+npm run devmap                                     # test fixture only
+npm run svg                                        # runs against assets/floorplan/venue.svg
+grep -c 'id="seat-' src/generated/floorplan.svg    # expect 96
 npm run svg                                        # second run: passes diff guard (no movement)
 ```
+
+Then render a visual check (`qlmanage -t -s 1200 -o /tmp src/generated/floorplan.svg` or open in a browser): tables present, viewBox cropped to the venue, no stretched/missing art.
 
 - [ ] **Step 8: Commit** — `git add scripts assets src/generated && git commit -m "feat: SVG pipeline deriving seat ids + seatmap from table groups"`
 
@@ -1700,16 +1756,14 @@ console.log(`wrote qr.png → ${url}`);
 
 ---
 
-### Task 14: Real floorplan swap-in (blocked on Corey's Affinity work)
+### Task 14: Floorplan acceptance pass (real map went in at Task 3)
 
 **Files:**
-- Modify: `assets/floorplan/` (new export), `src/generated/*` (regenerated)
+- None new — verification of `src/generated/*` against the live app, plus the re-export procedure for future edits.
 
-- [ ] **Step 1:** Corey finishes the Affinity file per the spec checklist (name 12 groups `table-1`…`table-12`, delete mockup table + name labels) and exports over `seating_affinity.svg` → move/copy to `assets/floorplan/venue.svg`.
-- [ ] **Step 2:** `npm run svg -- assets/floorplan/venue.svg --force` (first real run replaces the dev map; `--force` because the dev seatmap's positions are unrelated).
-- [ ] **Step 3:** Verify: `grep -c 'id="seat-'` → 96; `npm run test`; open guest + host pages, confirm all 12 tables tappable, seat 1 of each table sits where Corey expects 12 o'clock, embedded JPEG still looks right and file size dropped.
-- [ ] **Step 4:** If the venue JPEG contains text Corey doesn't want published (venue name etc.), decide now; otherwise proceed.
-- [ ] **Step 5: Commit** — `git add assets src/generated && git commit -m "feat: real venue floorplan"`
+- [ ] **Step 1:** With guest + host pages running against seeded data: all 12 tables tappable; chair highlighting/zoom lands correctly; seat 1 of each table sits where Corey expects "12 o'clock" — walk through 3 tables with him and renumber convention if his mental model differs (fix = adjust `seatNumbersFor` start angle, regenerate with `--force` BEFORE real assignments exist).
+- [ ] **Step 2:** Document the re-export loop at the top of `docs/deploy-runbook.md`: edit in Affinity → export → `cp seating_affinity.svg assets/floorplan/venue.svg && npm run svg` → the diff guard protects existing assignments; `--force` only for intentional layout changes.
+- [ ] **Step 3: Commit** — `git add docs && git commit -m "docs: floorplan re-export procedure"`
 
 ---
 
