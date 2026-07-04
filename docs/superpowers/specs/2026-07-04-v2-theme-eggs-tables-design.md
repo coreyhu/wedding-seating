@@ -2,13 +2,14 @@
 
 **Date:** 2026-07-04
 **Status:** Awaiting user review (one ⚑ input pending: couple names)
-**Builds on:** v1 (merged to main 2026-07-04) — see `2026-07-03-wedding-seating-design.md`. All v1 global constraints stand (vanilla TS, bilingual copy, no silent failures, free tiers) except where amended here.
+**Builds on:** v1 (merged to main 2026-07-04) — see `2026-07-03-wedding-seating-design.md`. All v1 global constraints stand (vanilla TS, no silent failures, free tiers) except one **amendment**: the v1 "bilingual copy shown together" rule is replaced by localization (§4) — guest UI renders in ONE language at a time; the host page becomes English-only.
 
 ## Scope
 
 1. **Botanical Garden visual theme** (user-selected from mockups) — both pages, hand-rolled CSS, no UI kit.
 2. **Easter eggs** (user-selected): petal burst on seat-find; sweetheart celebration when the couple's names are searched.
 3. **Custom table names** — name-only display (user-selected), tap-a-table editor on the host map.
+4. **Guest-page localization** (user-requested, replacing side-by-side bilingual copy): auto-detected EN/中文 with a persistent toggle.
 
 Explicitly out of scope (offered, declined): venue-quip searches, Konami disco mode, any UI framework/component kit (Shoelace/Tailwind evaluated and rejected: ~6 already-tested component types don't justify restyling-by-rewrite).
 
@@ -36,16 +37,15 @@ Explicitly out of scope (offered, declined): venue-quip searches, Konami disco m
   ```ts
   export const COUPLE = {
     partners: [
-      { name_en: '⚑COREY_EN', name_zh: '⚑COREY_ZH' },
-      { name_en: '⚑PARTNER_EN', name_zh: '⚑PARTNER_ZH' },
+      { name_en: 'Corey Hu', name_zh: '' },    // name_zh optional: '' never matches
+      { name_en: 'Lindsey Tam', name_zh: '' }, // Chinese names not chosen yet; add when they exist
     ],
-    message_en: 'You found us! Come say hi at the sweetheart table',
-    message_zh: '被你找到啦！快来甜心桌打个招呼',
+    message: { en: 'You found us! Come say hi at the sweetheart table 🌿', zh: '被你找到啦！快来甜心桌打个招呼 🌿' },
   };
   ```
-  ⚑ Names supplied by Corey before ship; placeholder values fail a build-time assert (`prepare-svg`-style guard in a unit test: values must not start with '⚑').
+  A unit test asserts every partner has a non-empty `name_en` (guards against placeholder regressions).
 - `matchesCouple(p: PreparedQuery): boolean` — reuses `normalizeEn`/CJK rules from `logic/search.ts`. **Exact match only**: EN matches iff the normalized query equals a partner's normalized `name_en`; ZH iff the whitespace-stripped query equals `name_zh`. (Substring matching was considered and rejected: a real guest sharing a name fragment with either partner would get the easter egg instead of their own seat.)
-- Guest search flow: couple match is checked **first**; on match the normal RPC flow is skipped and a special result renders: full-width botanical card with `message_en`/`message_zh` → map zooms to the sweetheart table landmark → `burstPetals` with `count: 48`.
+- Guest search flow: couple match is checked **first**; on match the normal RPC flow is skipped and a special result renders: full-width botanical card with `COUPLE.message[locale]` (§4) → map zooms to the sweetheart table landmark → `burstPetals` with `count: 48`.
 - The couple's names ship in the JS bundle — accepted (they're on the invitation).
 
 ### 2c. Landmark plumbing (enables 2b; future-proofs venue quips)
@@ -78,6 +78,15 @@ Explicitly out of scope (offered, declined): venue-quip searches, Konami disco m
 - **Maps**: both pages render each table's `label_zh` (fallback `label_en`) as a small `.table-label` text at the table center (from `seatmap.json`). Guest page fetches labels via... `search_guests` only returns labels per match — **guest map labels need `listTables()` for anon**. `tables` already grants anon select (v1). Guest page calls `listTables()` once at load; on failure, silently skips map labels (decorative — exception to the no-silent-failure rule, scoped to decoration).
 - **E2e additions**: rename a table via host UI → banner for a guest at that table shows the new name only; sweetheart search shows the celebration card; petals appear after a find; reduced-motion run shows none.
 
+## 4. Guest-page localization
+
+- **`src/guest/i18n.ts`** — no library. `type Locale = 'en' | 'zh'`; a dict of ~15 UI strings per locale; `t(key): string`; `detectLocale()`: localStorage `locale` if set, else `navigator.language` starting with `zh` → `'zh'`, else `'en'`; `setLocale(l)` persists to localStorage and re-renders static copy. `<html lang>` and `document.title` track the locale.
+- **Toggle**: a small persistent `EN / 中文` control in the guest header (shows the language you'd switch *to*). No first-visit chooser (user choice: auto-detect + toggle).
+- **What localizes**: all guest UI strings — title, search placeholder, empty state, connection toast + retry label, "no seat assigned" banner, seat text (`Seat 5` / `5号位`), sweetheart message, and **table labels** (EN locale → `label_en`, 中文 → `label_zh`; still name-only per §3).
+- **What stays dual**: guest names render as `name_en · name_zh` in both locales — names are identity data, and seeing both forms helps guests confirm it's really them.
+- **Host page**: English-only (user choice). The v1 bilingual host strings ("Unseated · 未安排" etc.) become English during the theme pass — copy churn stays inside files the theme already touches.
+- **E2e**: a `zh-CN` browser-locale context must land on 中文 automatically; toggling to EN must swap the placeholder and a table label live.
+
 ## Error handling
 
 - `set_table_label` failures → toast with message (host page pattern).
@@ -90,6 +99,6 @@ Explicitly out of scope (offered, declined): venue-quip searches, Konami disco m
 - E2e: 4 new checks (above) appended to `scripts/e2e.mjs`.
 - Existing 36 unit + 14 e2e must stay green; theme must not break the `.highlight`/`.occupied` `!important` contract.
 
-## ⚑ Open input
+## Open input
 
-1. Couple names (EN + 中文 for both partners) — required before ship; build fails on placeholders by design.
+None — couple names supplied (Corey Hu, Lindsey Tam; Chinese names to be added to `COUPLE` if/when chosen).
