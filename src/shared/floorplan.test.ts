@@ -50,3 +50,12 @@ it('zoomToLandmark and zoomToPoint are safe no-ops without panZoom', () => {
   const fp = mount();
   expect(() => { fp.zoomToLandmark('sweetheart_table'); fp.zoomToLandmark('nope'); fp.zoomToPoint(1, 2); }).not.toThrow();
 });
+it('setTableLabels draws above the table and replaces on re-call', () => {
+  const fp = mount();
+  fp.setTableLabels({ 1: 'Fern' });
+  fp.setTableLabels({ 1: '蕨' });
+  const els = container.querySelectorAll('.table-label');
+  expect(els).toHaveLength(1);
+  expect(els[0]!.textContent).toBe('蕨');
+  expect(Number(els[0]!.getAttribute('y'))).toBeLessThan(40); // cy 50 - r 10 - 6
+});

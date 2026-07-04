@@ -14,6 +14,7 @@ export interface Floorplan {
   zoomToPoint(cx: number, cy: number): void;
   zoomToLandmark(id: string): void;
   onSeatTap(cb: (key: SeatKey) => void): void;
+  setTableLabels(labels: Record<number, string>): void;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -85,6 +86,18 @@ export function mountFloorplan(container: HTMLElement,
         const hit = (e.target as Element).closest('[id^="seat-"]');
         if (hit) cb(hit.id.slice('seat-'.length));
       });
+    },
+    setTableLabels(labels) {
+      svg.querySelectorAll('.table-label').forEach(e => e.remove());
+      for (const [no, text] of Object.entries(labels)) {
+        const tb = seatMap.tables[no];
+        if (!tb || !text) continue;
+        const el = document.createElementNS(SVG_NS, 'text');
+        el.setAttribute('x', String(tb.cx)); el.setAttribute('y', String(tb.cy - tb.r - 6));
+        el.setAttribute('class', 'table-label');
+        el.textContent = text;
+        svg.append(el);
+      }
     },
   };
 }

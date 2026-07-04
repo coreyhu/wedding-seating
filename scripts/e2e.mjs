@@ -28,7 +28,7 @@ check('guest: "eric" shows 2 cards', cards === 2, `got ${cards}`);
 await page.locator('.card').first().click();
 await page.waitForSelector('#banner:not([hidden])', { timeout: 3000 });
 const bannerText = await page.textContent('#banner');
-check('guest: banner shows bilingual table', /号桌/.test(bannerText), bannerText.trim().slice(0, 60));
+check('guest: banner shows bilingual table', /Table 1|1号桌/.test(bannerText), bannerText.trim().slice(0, 60));
 const highlighted = await page.locator('svg .highlight').count();
 check('guest: exactly one chair highlighted', highlighted === 1, `got ${highlighted}`);
 
@@ -38,19 +38,28 @@ check('guest: single CJK char auto-selects 刘艾瑞', true);
 await page.fill('#q', 'zzzz');
 await page.waitForSelector('.empty', { timeout: 5000 });
 const empty = await page.textContent('.empty');
-check('guest: no-match shows bilingual help', /迎宾台/.test(empty));
+check('guest: no-match shows bilingual help', /welcome table|迎宾台/.test(empty));
 
 // network failure -> toast -> retry
 await ctx.route('**/rest/v1/rpc/search_guests**', r => r.abort());
 await page.fill('#q', 'carol');
 await page.waitForSelector('.toast', { timeout: 5000 });
-check('guest: network failure shows toast', /网络异常/.test(await page.textContent('.toast')));
+check('guest: network failure shows toast', /Connection trouble|网络异常/.test(await page.textContent('.toast')));
 await ctx.unroute('**/rest/v1/rpc/search_guests**');
 await page.click('.toast button');
 await page.waitForFunction(() => !document.querySelector('#banner').hidden && document.querySelector('#banner').textContent.includes('Carol'), null, { timeout: 5000 });
 check('guest: toast retry recovers results', true);
 const staleToast = await page.locator('.toast').count();
 check('guest: stale toast dismissed after success', staleToast === 0, `got ${staleToast}`);
+
+// ---------- LOCALIZATION ----------
+const zhCtx = await browser.newContext({ locale: 'zh-CN', viewport: { width: 390, height: 844 } });
+const zhPage = await zhCtx.newPage();
+await zhPage.goto(BASE + '/');
+check('i18n: zh-CN browser lands on Chinese', (await zhPage.getAttribute('#q', 'placeholder')).includes('姓名'));
+await zhPage.click('#lang-toggle');
+check('i18n: toggle switches to English live', (await zhPage.getAttribute('#q', 'placeholder')).includes('Your name'));
+await zhCtx.close();
 
 // ---------- HOST PAGE ----------
 await page.goto(BASE + '/host.html');

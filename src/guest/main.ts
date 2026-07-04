@@ -1,46 +1,67 @@
 import '@fontsource/fraunces/600.css';
-import { searchGuests } from '../shared/api';
+import { searchGuests, listTables } from '../shared/api';
 import { mountFloorplan } from '../shared/floorplan';
 import { dismissToast, toast } from '../shared/toast';
 import { prepareQuery, rankMatches } from '../logic/search';
-import { seatKey, type GuestMatch } from '../shared/types';
+import { seatKey, type GuestMatch, type TableInfo } from '../shared/types';
+import { detectLocale, getLocale, onLocaleChange, pickLabel, seatText, setLocale, t } from './i18n';
 
 const fp = mountFloorplan(document.querySelector('#map')!);
 const input = document.querySelector<HTMLInputElement>('#q')!;
 const results = document.querySelector<HTMLElement>('#results')!;
 const banner = document.querySelector<HTMLElement>('#banner')!;
+const langToggle = document.querySelector<HTMLButtonElement>('#lang-toggle')!;
+
+let tables: TableInfo[] = [];
+let lastMatches: GuestMatch[] | null = null;
+let lastShown: GuestMatch | null = null;
 
 const displayName = (g: GuestMatch) => [g.name_en, g.name_zh].filter(Boolean).join(' · ');
+const tableLabel = (g: GuestMatch) => pickLabel(g.label_en, g.label_zh);
+
+function renderStatics(): void {
+  document.querySelector('.topbar h1')!.lastChild!.textContent = t('title');
+  input.placeholder = t('placeholder');
+  langToggle.textContent = t('toggle');
+  renderTableLabels();
+}
+
+function renderTableLabels(): void {
+  const labels: Record<number, string> = {};
+  for (const tb of tables) labels[tb.table_no] = pickLabel(tb.label_en, tb.label_zh);
+  fp.setTableLabels(labels);
+}
 
 function showGuest(g: GuestMatch): void {
-  results.innerHTML = '';
+  lastShown = g;
+  results.replaceChildren();
+  banner.hidden = false;
   if (g.table_no == null || g.seat_no == null) {
-    banner.hidden = false;
-    banner.textContent = `${displayName(g)} — no seat assigned yet · 尚未安排座位`;
+    banner.textContent = `${displayName(g)} — ${t('noSeat')}`;
     fp.highlight(null);
     return;
   }
   const key = seatKey(g.table_no, g.seat_no);
-  banner.hidden = false;
-  const name = document.createElement('strong');
-  name.textContent = displayName(g);
-  const seat = document.createElement('small');
-  seat.textContent = `Seat ${g.seat_no} · ${g.seat_no}号位`;
-  banner.replaceChildren(
-    name,
-    document.createElement('br'),
-    `${g.label_en ?? `Table ${g.table_no}`} · ${g.label_zh ?? `${g.table_no}号桌`} `,
-    seat,
-  );
+  const strong = document.createElement('strong');
+  strong.textContent = displayName(g);
+  const small = document.createElement('small');
+  small.textContent = seatText(g.seat_no);
+  banner.replaceChildren(strong, document.createElement('br'),
+    `${tableLabel(g)} `, small);
   fp.highlight(key);
   fp.zoomToSeat(key);
 }
 
 function renderResults(matches: GuestMatch[]): void {
+  lastMatches = matches;
+  lastShown = null;
   banner.hidden = true;
-  results.innerHTML = '';
+  results.replaceChildren();
   if (!matches.length) {
-    results.innerHTML = `<p class="empty">Can't find your name? Ask at the welcome table.<br>找不到您的名字？请到迎宾台咨询。</p>`;
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = t('emptyState');
+    results.append(p);
     return;
   }
   for (const g of matches) {
@@ -49,7 +70,7 @@ function renderResults(matches: GuestMatch[]): void {
     const name = document.createElement('span');
     name.textContent = displayName(g);
     const where = document.createElement('small');
-    where.textContent = `${g.label_en ?? ''} · ${g.label_zh ?? ''}`;
+    where.textContent = tableLabel(g);
     b.append(name, where);
     b.onclick = () => showGuest(g);
     results.append(b);
@@ -63,13 +84,30 @@ input.addEventListener('input', () => {
   clearTimeout(timer);
   timer = setTimeout(() => {
     const p = prepareQuery(input.value);
-    if (p.kind === 'too-short') { results.innerHTML = ''; banner.hidden = true; fp.highlight(null); return; }
+    if (p.kind === 'too-short') {
+      lastMatches = null; lastShown = null;
+      results.replaceChildren(); banner.hidden = true; fp.highlight(null);
+      return;
+    }
     lastRun = async () => {
       try {
         renderResults(rankMatches(p, await searchGuests(p.q)));
-        dismissToast(); // a stale connection-error toast must not outlive a successful search
-      } catch { toast('Connection trouble · 网络异常', { retry: lastRun }); }
+        dismissToast();
+      } catch { toast(t('connectionTrouble'), { retry: lastRun, retryLabel: t('retry') }); }
     };
     lastRun();
   }, 250);
 });
+
+langToggle.addEventListener('click', () => setLocale(getLocale() === 'en' ? 'zh' : 'en'));
+onLocaleChange(() => {
+  renderStatics();
+  if (lastShown) showGuest(lastShown);
+  else if (lastMatches) renderResults(lastMatches);
+});
+
+setLocale(detectLocale());
+void (async () => {
+  try { tables = await listTables(); renderTableLabels(); }
+  catch { /* decorative map labels — spec-documented silent skip */ }
+})();
