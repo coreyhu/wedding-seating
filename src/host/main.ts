@@ -58,13 +58,34 @@ function renderMode(): void {
     fp.highlight(mode.seat);
     const occupantId = mode.occupantId;
     const g = occupantId ? guests.find(x => x.id === occupantId) : null;
-    p.innerHTML = g
-      ? `<p><strong>${nameOf(g)}</strong> — seat ${mode.seat}</p>
-         <button id="move">Move / Swap · 移动</button> <button id="unseat">Unseat · 取消座位</button> <button id="cancel">Close · 关闭</button>`
-      : `<p>Empty seat ${mode.seat} · 空位 — pick a guest below or from the unseated list</p>
-         <input id="pick-filter" placeholder="Filter unseated · 筛选" /><div id="pick-list"></div>
-         <button id="cancel">Close · 关闭</button>`;
-    if (!g) renderPickList('');
+    // Guest names are user-derived: build panel content via DOM APIs
+    // (textContent), never innerHTML interpolation (same hardening as the
+    // guest page). Ids/structure match the static markup exactly so the
+    // listener wiring below and CSS are unaffected.
+    const btn = (id: string, label: string) => {
+      const b = document.createElement('button');
+      b.id = id; b.textContent = label;
+      return b;
+    };
+    const info = document.createElement('p');
+    if (g) {
+      const name = document.createElement('strong');
+      name.textContent = nameOf(g);
+      info.append(name, ` — seat ${mode.seat}`);
+      p.replaceChildren(info,
+        btn('move', 'Move / Swap · 移动'), ' ',
+        btn('unseat', 'Unseat · 取消座位'), ' ',
+        btn('cancel', 'Close · 关闭'));
+    } else {
+      info.textContent = `Empty seat ${mode.seat} · 空位 — pick a guest below or from the unseated list`;
+      const filter = document.createElement('input');
+      filter.id = 'pick-filter';
+      filter.placeholder = 'Filter unseated · 筛选';
+      const list = document.createElement('div');
+      list.id = 'pick-list';
+      p.replaceChildren(info, filter, list, btn('cancel', 'Close · 关闭'));
+      renderPickList('');
+    }
     p.querySelector('#pick-filter')?.addEventListener('input', e =>
       renderPickList((e.target as HTMLInputElement).value));
     p.querySelector('#move')?.addEventListener('click', () => step(sm.pressMove(mode)));
