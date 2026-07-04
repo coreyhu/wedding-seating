@@ -2,14 +2,14 @@ export function dismissToast(): void {
   document.querySelector('.toast')?.remove();
 }
 
-export function toast(msg: string, opts: { retry?: () => void } = {}): void {
+export function toast(msg: string, opts: { retry?: () => void; retryLabel?: string } = {}): void {
   dismissToast();
   const el = document.createElement('div');
   el.className = 'toast';
   el.textContent = msg;
   if (opts.retry) {
     const b = document.createElement('button');
-    b.textContent = 'Retry · 重试';
+    b.textContent = opts.retryLabel ?? 'Retry';
     b.onclick = () => { el.remove(); opts.retry!(); };
     el.append(b);
   }
