@@ -1,2 +1,7 @@
 seating_affinity.af
 *.af~lock~
+.superpowers/
+node_modules/
+dist/
+.env
+.env.local
