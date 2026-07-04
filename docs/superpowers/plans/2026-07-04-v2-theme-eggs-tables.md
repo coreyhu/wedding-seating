@@ -1205,6 +1205,119 @@ await bridgePage.close();
 
 ---
 
+### Task 9: Map-first guest layout + animated zoom
+
+**Files:**
+- Modify: `src/shared/floorplan.ts` (animated zoomToPoint + resize handling), `src/shared/floorplan.test.ts` (1 test), `index.html` (overlay structure), `src/styles.css` (guest overlay layout), `scripts/e2e.mjs` (+1 layout check)
+- Guest page only — `host.html`/host CSS grid untouched.
+
+**Interfaces:**
+- Consumes: everything as of Task 8. Produces: no interface changes — `zoomToPoint(cx, cy)` keeps its signature, gains animation.
+
+- [ ] **Step 1: Failing test** — append to `src/shared/floorplan.test.ts`:
+
+```ts
+it('animated zoomToPoint stays a safe no-op without panZoom and cancels cleanly', () => {
+  const fp = mount();
+  expect(() => { fp.zoomToPoint(1, 2); fp.zoomToPoint(3, 4); }).not.toThrow();
+});
+```
+
+- [ ] **Step 2: Implement animation in `src/shared/floorplan.ts`** — replace the `zoomToPoint` const:
+
+```ts
+  let zoomAnim = 0;
+  const zoomToPoint = (cx: number, cy: number): void => {
+    if (!pz) return;
+    cancelAnimationFrame(zoomAnim);
+    const { width, height, realZoom } = pz.getSizes();
+    const startZoom = pz.getZoom();
+    const startPan = pz.getPan();
+    const startCenter = { x: (width / 2 - startPan.x) / realZoom, y: (height / 2 - startPan.y) / realZoom };
+    const targetZoom = 5;
+    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const apply = (z: number, c: { x: number; y: number }) => {
+      pz!.zoom(z);
+      const rz = pz!.getSizes().realZoom;
+      pz!.pan({ x: width / 2 - c.x * rz, y: height / 2 - c.y * rz });
+    };
+    if (reduced || typeof requestAnimationFrame !== 'function') return apply(targetZoom, { x: cx, y: cy });
+    const t0 = performance.now();
+    const DURATION = 600;
+    const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    const frame = (now: number) => {
+      const t = Math.min(1, (now - t0) / DURATION);
+      const k = ease(t);
+      apply(startZoom + (targetZoom - startZoom) * k,
+        { x: startCenter.x + (cx - startCenter.x) * k, y: startCenter.y + (cy - startCenter.y) * k });
+      if (t < 1) zoomAnim = requestAnimationFrame(frame);
+    };
+    zoomAnim = requestAnimationFrame(frame);
+  };
+```
+
+Add resize handling inside `mountFloorplan` right after the `pz` construction (only when `pz` exists):
+
+```ts
+  if (pz) {
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { pz!.resize(); pz!.fit(); pz!.center(); }, 150);
+    });
+  }
+```
+
+- [ ] **Step 3: Overlay layout.** `index.html` main becomes:
+
+```html
+<main class="guest guest-mapfirst">
+  <div id="map" class="map mapfull"></div>
+  <div class="overlay">
+    <header class="topbar panel-card">
+      <h1><span class="leaf" aria-hidden="true">✿</span>Find your seat</h1>
+      <button id="lang-toggle" class="lang-toggle">中文</button>
+    </header>
+    <div class="searchbar panel-card"><input id="q" type="search" autocomplete="off" placeholder="Your name…" /></div>
+    <div id="banner" class="banner" hidden></div>
+    <div id="results" class="results"></div>
+  </div>
+</main>
+```
+
+(The old standalone `<header class="topbar">` at body level is REMOVED from index.html — the topbar moves inside the overlay. host.html keeps its body-level topbar; the `.topbar` CSS must therefore work in both contexts. `renderStatics`'s `document.querySelector('.topbar h1')!.lastChild` selector still matches. The `.divider` element is dropped — the map IS the page now.)
+
+Replace the guest-layout CSS block in `src/styles.css` (`.guest`, `.searchbar`, `.results`, `.map` sizing — keep `.card`/`.banner`/`.sweetheart-card`/`.empty` content styles):
+
+```css
+.guest-mapfirst { position: relative; }
+.map.mapfull { position: fixed; inset: 0; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+.overlay { position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  width: min(560px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 8px;
+  padding-top: 10px; z-index: 10; pointer-events: none; max-height: 100dvh; }
+.overlay > *, .overlay .results > * { pointer-events: auto; }
+.panel-card { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); }
+.overlay .topbar { border-bottom: 1px solid var(--line); padding: 10px 14px; }
+.overlay .searchbar { padding: 6px; }
+.overlay .searchbar input { border: 0; outline: none; }
+.overlay .searchbar:focus-within { outline: 2px solid var(--accent); }
+.results { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 40vh; }
+```
+
+- [ ] **Step 4: e2e** — append after the LOCALIZATION block (uses the default `page`):
+
+```js
+const mapBox = await page.locator('#map').boundingBox();
+const vp = page.viewportSize();
+check('layout: map fills the viewport', mapBox.width >= vp.width - 2 && mapBox.height >= vp.height - 2);
+```
+
+- [ ] **Step 5: Verify** — `npx vitest run` + `npm run check` green; full e2e green (count grows by 1; earlier checks must still pass — the overlay must not cover the map's tap targets in the host flow, which is a different page and unaffected). Screenshot the guest page at 390×844 AND 1440×900, Read both: map edge-to-edge, floating header/search, results overlay scrolls, no horizontal scrollbar.
+
+- [ ] **Step 6: Commit** — `git add index.html src/shared src/styles.css scripts/e2e.mjs && git commit -m "feat: map-first guest layout + animated zoom"`
+
+---
+
 ## Verification (whole-plan)
 
 1. `npx vitest run` — all unit suites green (v1 36 − csv + new i18n/couple/effects/floorplan/landmark/matrix/pinyin tests).

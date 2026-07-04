@@ -111,7 +111,11 @@ Guest-side only; no schema changes; the server's `search_guests` is called with 
 - **Non-goals**: no hanzi guessing for EN queries; heteronym surnames beyond the variant map may miss (accepted; slash override exists); no server changes.
 - **Tests**: unit tests use real sheet names (胡向平→Xiang Ping Hu; 萧→Hsiao via variant; 谭→Tam via variant); e2e: matrix-import a mini sheet in the host flow, then a 汉字 search on the guest page finds a pinyin-only guest through the bridge.
 
-## Error handling
+## 7. Map-first guest layout + animated zoom (user feedback 2026-07-04, desktop testing)
+
+- **Layout (guest page only; host unchanged):** the floorplan fills the entire viewport (`position: fixed; inset: 0; height: 100dvh`). Everything else floats above it as overlay panels: one top-center overlay column (max-width 560px) containing the header card (leaf + title left, language toggle right), the search pill, and the results/banner stack (results scroll internally, `max-height: 40vh`). Panels are solid theme cards with shadows; pointer events pass through the overlay column's empty space to the map. Petals now fall over the full viewport (their container is the map).
+- **Resize correctness:** svg-pan-zoom must `resize()` + re-fit on window resize and at mount (the map box is no longer a fixed 60vh card).
+- **Animated zoom:** `zoomToPoint` animates over ~600ms with cubic ease-in-out via requestAnimationFrame, interpolating the view center in SVG coordinates and the zoom level simultaneously (center(t) = lerp(startCenter, targetCenter), zoom(t) = lerp(startZoom, 5); pan derived per frame as `size/2 − center(t)·realZoom(t)`). A new zoom call cancels any in-flight animation. `prefers-reduced-motion` or missing rAF → instant jump (current behavior). `zoomToSeat`/`zoomToLandmark` inherit the animation automatically.
 
 - `set_table_label` failures → toast with message (host page pattern).
 - Effects (`burstPetals`, celebration) are decorative: wrapped, never throw into the search flow.
