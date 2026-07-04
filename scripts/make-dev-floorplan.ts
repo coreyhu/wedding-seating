@@ -5,9 +5,6 @@ export function devFloorplanSvg(): string {
   for (let t = 1; t <= 12; t++) {
     const col = (t - 1) % 4, row = Math.floor((t - 1) / 4);
     const cx = 250 + col * 320, cy = 250 + row * 320;
-    // Absolute path commands only (L, not h/v): the transform's centroid
-    // heuristic pairs ALL numbers in `d` as x,y coords, which is only valid
-    // for absolute commands. Affinity exports absolute coords too.
     const rect = (x: number, y: number, w: number, h: number) =>
       `M ${x} ${y} L ${x + w} ${y} L ${x + w} ${y + h} L ${x} ${y + h} Z`;
     const table = `<path d="${rect(cx - 60, cy - 60, 120, 120)}" fill="#eee" stroke="#999"/>`;
