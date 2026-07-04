@@ -25,15 +25,22 @@ export function requireAuth(onReady: () => void): void {
     form.addEventListener('submit', async e => {
       e.preventDefault();
       // In-flight guard: a second submit (double-click / double-Enter) while
-      // signIn() is pending would fire it concurrently and could call
-      // ready(onReady) twice. Disabling the sole submit button also blocks
-      // implicit (Enter-key) form submission.
+      // signIn() is pending would fire it concurrently and could trigger a
+      // duplicate sign-in / reload. Disabling the sole submit button also
+      // blocks implicit (Enter-key) form submission.
       if (submit.disabled) return;
       submit.disabled = true;
       const f = new FormData(e.target as HTMLFormElement);
       try {
         await signIn(String(f.get('email')), String(f.get('password')));
-        ready(onReady); // success: stays disabled; the form is done
+        // Reload (mirroring signOut()) rather than calling ready(onReady)
+        // in place: the login form was rendered by overwriting #app's
+        // innerHTML, which destroys whatever markup #app held before the
+        // auth gate ran (e.g. host.html's #map/#panel/#import). A reload
+        // re-runs requireAuth() from a fresh DOM with a now-valid session,
+        // so it takes the already-authed path and onReady sees the original
+        // markup intact instead of the login form's leftovers.
+        location.reload();
       } catch (err) {
         submit.disabled = false; // failure: keep the form usable for retry
         toast(err instanceof Error ? err.message : 'Sign-in failed');

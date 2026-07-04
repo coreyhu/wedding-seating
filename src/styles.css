@@ -29,3 +29,14 @@ body { margin: 0; font-family: -apple-system, "PingFang SC", "Noto Sans SC", san
 .card small { color: var(--muted); }
 .banner { padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: 10px; font-size: 16px; }
 .empty { color: var(--muted); text-align: center; padding: 8px; }
+
+.hostwrap #app { display: grid; grid-template-columns: 1fr 300px; gap: 12px; padding: 12px; }
+.map.tall { height: calc(100vh - 120px); }
+.sidebar { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.badge { background: var(--accent); color: #fff; border-radius: 10px; padding: 1px 8px; font-size: 13px; }
+.panel { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 2px solid var(--line);
+  padding: 12px 16px 20px; z-index: 50; box-shadow: 0 -4px 16px rgba(0,0,0,.12); }
+.panel button { padding: 10px 14px; font-size: 15px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+body.picking .floorplan { cursor: crosshair; }
+body.picking .seat:not(.highlight) { opacity: .75; }
+@media (max-width: 800px) { .hostwrap #app { grid-template-columns: 1fr; } .map.tall { height: 55vh; } }

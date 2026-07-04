@@ -8,7 +8,17 @@
 </head>
 <body>
   <header class="topbar"><h1>Seating admin · 座位管理</h1></header>
-  <main id="app"></main>
+  <main class="hostwrap">
+    <div id="app">
+      <div id="map" class="map tall"></div>
+      <aside class="sidebar">
+        <h2>Unseated · 未安排 <span id="unseated-count" class="badge"></span></h2>
+        <div id="unseated"></div>
+        <details id="import-box"><summary>Import guests (CSV) · 导入宾客</summary><div id="import"></div></details>
+      </aside>
+      <div id="panel" class="panel" hidden></div>
+    </div>
+  </main>
   <script type="module" src="/src/host/main.ts"></script>
 </body>
 </html>
