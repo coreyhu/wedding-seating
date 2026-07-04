@@ -26,6 +26,14 @@ it('t() and seatText follow the locale; setLocale persists and notifies', () => 
   expect(cb).toHaveBeenCalled();
   expect(getLocale()).toBe('zh');
 });
+it('setLocale with the current value still notifies subscribers (persist skipped)', () => {
+  const cb = vi.fn();
+  onLocaleChange(cb);
+  localStorage.clear();
+  setLocale(getLocale()); // unchanged value
+  expect(cb).toHaveBeenCalled();
+  expect(localStorage.getItem('locale')).toBeNull(); // redundant persist skipped
+});
 it('pickLabel picks by locale with cross-fallback', () => {
   expect(pickLabel('Fern', '蕨')).toBe('Fern');
   setLocale('zh');

@@ -21,9 +21,8 @@ export function detectLocale(): Locale {
 }
 export const getLocale = (): Locale => locale;
 export function setLocale(l: Locale): void {
-  if (locale === l) return;
+  if (locale !== l) localStorage.setItem('locale', l); // skip only the redundant persist
   locale = l;
-  localStorage.setItem('locale', l);
   document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
   document.title = STRINGS.title[l];
   subscribers.forEach(cb => cb());
