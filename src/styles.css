@@ -3,6 +3,11 @@
 body { margin: 0; font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; color: var(--ink); background: var(--bg); }
 .topbar { padding: 12px 16px; border-bottom: 1px solid var(--line); background: #fff; }
 .topbar h1 { margin: 0; font-size: 18px; }
+.topbar { display:flex; justify-content:space-between; align-items:center; }
+
+.login { display:flex; flex-direction:column; gap:8px; max-width:320px; margin:48px auto; }
+.login input,.login button { padding:10px; font-size:16px; }
+.signout { border:0; background:none; color:var(--muted); }
 
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
   background: #333; color: #fff; padding: 10px 14px; border-radius: 8px;
