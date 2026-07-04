@@ -5,12 +5,15 @@ import { dismissToast, toast } from '../shared/toast';
 import { prepareQuery, rankMatches } from '../logic/search';
 import { seatKey, type GuestMatch, type TableInfo } from '../shared/types';
 import { detectLocale, getLocale, onLocaleChange, pickLabel, seatText, setLocale, t } from './i18n';
+import { burstPetals } from './effects';
+import { COUPLE, matchesCouple } from './couple';
 
 const fp = mountFloorplan(document.querySelector('#map')!);
 const input = document.querySelector<HTMLInputElement>('#q')!;
 const results = document.querySelector<HTMLElement>('#results')!;
 const banner = document.querySelector<HTMLElement>('#banner')!;
 const langToggle = document.querySelector<HTMLButtonElement>('#lang-toggle')!;
+const mapEl = document.querySelector<HTMLElement>('#map')!;
 
 let tables: TableInfo[] = [];
 let lastMatches: GuestMatch[] | null = null;
@@ -35,6 +38,7 @@ function renderTableLabels(): void {
 function showGuest(g: GuestMatch): void {
   lastShown = g;
   results.replaceChildren();
+  banner.className = 'banner';
   banner.hidden = false;
   if (g.table_no == null || g.seat_no == null) {
     banner.textContent = `${displayName(g)} — ${t('noSeat')}`;
@@ -50,11 +54,13 @@ function showGuest(g: GuestMatch): void {
     `${tableLabel(g)} `, small);
   fp.highlight(key);
   fp.zoomToSeat(key);
+  burstPetals(mapEl);
 }
 
 function renderResults(matches: GuestMatch[]): void {
   lastMatches = matches;
   lastShown = null;
+  banner.className = 'banner';
   banner.hidden = true;
   results.replaceChildren();
   if (!matches.length) {
@@ -87,6 +93,17 @@ input.addEventListener('input', () => {
     if (p.kind === 'too-short') {
       lastMatches = null; lastShown = null;
       results.replaceChildren(); banner.hidden = true; fp.highlight(null);
+      return;
+    }
+    if (matchesCouple(p)) {
+      lastMatches = null; lastShown = null;
+      results.replaceChildren();
+      banner.hidden = false;
+      banner.className = 'sweetheart-card';
+      banner.textContent = COUPLE.message[getLocale()];
+      fp.highlight(null);
+      fp.zoomToLandmark('sweetheart_table');
+      burstPetals(mapEl, { count: 48 });
       return;
     }
     lastRun = async () => {

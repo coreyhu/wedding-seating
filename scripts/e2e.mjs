@@ -1,4 +1,4 @@
-// E2E regression suite (14 checks): guest search/highlight/toast-retry, host login/assign/swap/unseat.
+// E2E regression suite (18 checks): guest search/highlight/toast-retry/eggs, host login/assign/swap/unseat.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // Host-page mutations are reverted at the end; safe against the seed data.
@@ -51,6 +51,17 @@ await page.waitForFunction(() => !document.querySelector('#banner').hidden && do
 check('guest: toast retry recovers results', true);
 const staleToast = await page.locator('.toast').count();
 check('guest: stale toast dismissed after success', staleToast === 0, `got ${staleToast}`);
+
+await page.fill('#q', 'eric');
+await page.waitForSelector('.card');
+await page.locator('.card').first().click();
+await page.waitForSelector('.petal', { timeout: 3000 });
+check('eggs: petals fall when a seat is found', true);
+
+await page.fill('#q', 'Corey Hu');
+await page.waitForSelector('.sweetheart-card:not([hidden])', { timeout: 4000 });
+check('eggs: sweetheart celebration on exact couple name',
+  /found us|找到/.test(await page.textContent('.sweetheart-card')));
 
 // ---------- LOCALIZATION ----------
 const zhCtx = await browser.newContext({ locale: 'zh-CN', viewport: { width: 390, height: 844 } });
