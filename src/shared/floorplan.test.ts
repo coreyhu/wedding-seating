@@ -8,7 +8,8 @@ const svgText = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <path id="seat-1-2" class="seat" d="M70 45 h10 v10 h-10 z"/></g></svg>`;
 const seatMap: SeatMap = { viewBox: '0 0 100 100',
   tables: { '1': { cx: 50, cy: 50, r: 10 } },
-  seats: { '1-1': { cx: 50, cy: 25 }, '1-2': { cx: 75, cy: 50 } } };
+  seats: { '1-1': { cx: 50, cy: 25 }, '1-2': { cx: 75, cy: 50 } },
+  landmarks: { sweetheart_table: { cx: 10, cy: 10 } } };
 
 let container: HTMLElement;
 beforeEach(() => { document.body.innerHTML = '<div id="c"></div>'; container = document.querySelector('#c')!; });
@@ -44,4 +45,8 @@ it('delegates seat taps', () => {
   fp.onSeatTap(cb);
   fp.seatEl('1-2')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   expect(cb).toHaveBeenCalledWith('1-2');
+});
+it('zoomToLandmark and zoomToPoint are safe no-ops without panZoom', () => {
+  const fp = mount();
+  expect(() => { fp.zoomToLandmark('sweetheart_table'); fp.zoomToLandmark('nope'); fp.zoomToPoint(1, 2); }).not.toThrow();
 });

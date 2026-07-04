@@ -11,6 +11,8 @@ export interface Floorplan {
   addSeatLabel(key: SeatKey, text: string): void;
   clearSeatLabels(): void;
   zoomToSeat(key: SeatKey): void;
+  zoomToPoint(cx: number, cy: number): void;
+  zoomToLandmark(id: string): void;
   onSeatTap(cb: (key: SeatKey) => void): void;
 }
 
@@ -40,6 +42,13 @@ export function mountFloorplan(container: HTMLElement,
   const seatEl = (key: SeatKey) => svg.querySelector<SVGGraphicsElement>(`#seat-${escapeId(key)}`)
     ?? svg.querySelector<SVGGraphicsElement>(`[id="seat-${key}"]`);
 
+  const zoomToPoint = (cx: number, cy: number) => {
+    if (!pz) return;
+    pz.zoom(5);
+    const { width, height, realZoom } = pz.getSizes();
+    pz.pan({ x: width / 2 - cx * realZoom, y: height / 2 - cy * realZoom });
+  };
+
   return {
     svg,
     seatEl,
@@ -63,10 +72,13 @@ export function mountFloorplan(container: HTMLElement,
     },
     clearSeatLabels() { svg.querySelectorAll('.seat-label').forEach(e => e.remove()); },
     zoomToSeat(key) {
-      const seat = seatMap.seats[key]; if (!seat || !pz) return;
-      pz.zoom(5);
-      const { width, height, realZoom } = pz.getSizes();
-      pz.pan({ x: width / 2 - seat.cx * realZoom, y: height / 2 - seat.cy * realZoom });
+      const seat = seatMap.seats[key];
+      if (seat) zoomToPoint(seat.cx, seat.cy);
+    },
+    zoomToPoint(cx, cy) { zoomToPoint(cx, cy); },
+    zoomToLandmark(id) {
+      const lm = seatMap.landmarks[id];
+      if (lm) zoomToPoint(lm.cx, lm.cy);
     },
     onSeatTap(cb) {
       svg.addEventListener('click', e => {

@@ -52,3 +52,26 @@ describe('transformFloorplan', () => {
     expect(() => transformFloorplan(src, prev)).toThrow(/seat 1-1/);
   });
 });
+
+describe('landmarks', () => {
+  const withLandmarks = src.replace('</svg>',
+    `<g id="sweetheart_table"><circle cx="700" cy="80" r="20"/><path d="M 690 70 L 710 70 L 710 90 L 690 90 Z"/></g>
+     <path id="bar" d="M 100 1000 L 140 1000 L 140 1040 L 100 1040 Z"/></svg>`);
+  it('extracts non-table ids with centers', () => {
+    const { seatMap } = transformFloorplan(withLandmarks, null);
+    expect(seatMap.landmarks['sweetheart_table']!.cx).toBeCloseTo(700, 0);
+    expect(seatMap.landmarks['bar']).toEqual({ cx: 120, cy: 1020 });
+  });
+  it('never records tables/seats/container as landmarks', () => {
+    const { seatMap } = transformFloorplan(withLandmarks, null);
+    expect(Object.keys(seatMap.landmarks)).toEqual(expect.not.arrayContaining(
+      Object.keys(seatMap.tables).map(t => `table-${t}`)));
+    expect(seatMap.landmarks['guest_tables']).toBeUndefined();
+  });
+  it('diff guard ignores landmark changes and tolerates prev maps without landmarks', () => {
+    const { seatMap } = transformFloorplan(withLandmarks, null);
+    const prev = structuredClone(seatMap) as SeatMap & { landmarks?: unknown };
+    delete (prev as unknown as Record<string, unknown>).landmarks;   // v1 seatmap.json shape
+    expect(() => transformFloorplan(withLandmarks, prev as SeatMap)).not.toThrow();
+  });
+});

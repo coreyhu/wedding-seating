@@ -5,6 +5,7 @@ export interface SeatMap {
   viewBox: string;
   tables: Record<string, { cx: number; cy: number; r: number }>;
   seats: Record<string, { cx: number; cy: number }>;
+  landmarks: Record<string, { cx: number; cy: number }>;
 }
 
 const MOVE_TOLERANCE = 25; // svg units; larger displacement of an existing seat fails the build
@@ -46,7 +47,7 @@ export function transformFloorplan(svgText: string, prevMap: SeatMap | null): { 
   const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
   const svg = doc.querySelector('svg');
   if (!svg) throw new Error('not an SVG document');
-  const seatMap: SeatMap = { viewBox: svg.getAttribute('viewBox') ?? '', tables: {}, seats: {} };
+  const seatMap: SeatMap = { viewBox: svg.getAttribute('viewBox') ?? '', tables: {}, seats: {}, landmarks: {} };
 
   const nameOf = (g: Element) => {
     const raw = [g.getAttribute('serif:id'), g.getAttribute('id')].find(v => /^table[-_]\d+$/.test(v ?? ''));
@@ -78,6 +79,20 @@ export function transformFloorplan(svgText: string, prevMap: SeatMap | null): { 
       ch.p.classList.add('seat');
       seatMap.seats[`${t}-${nums[i]}`] = { cx: chairCentroids[i]!.x, cy: chairCentroids[i]!.y };
     });
+  }
+
+  const SKIP_LANDMARK = /^(table|seat)[-_]/;
+  for (const el of [...doc.querySelectorAll('[id]')]) {
+    const id = el.getAttribute('id')!;
+    if (el.tagName.toLowerCase() === 'svg' || id === 'guest_tables' || SKIP_LANDMARK.test(id)) continue;
+    const pts: Pt[] = [];
+    const paths = el.tagName.toLowerCase() === 'path' ? [el] : [...el.querySelectorAll('path')];
+    for (const p of paths) pts.push(...pathPoints(p.getAttribute('d') ?? ''));
+    const circles = el.tagName.toLowerCase() === 'circle' ? [el] : [...el.querySelectorAll('circle')];
+    for (const c of circles) pts.push({ x: Number(c.getAttribute('cx')), y: Number(c.getAttribute('cy')) });
+    if (!pts.length) continue;
+    const center = centroid(pts);
+    seatMap.landmarks[id] = { cx: center.x, cy: center.y };
   }
 
   // Tighten viewBox: the Affinity page is much taller than the drawn map.
