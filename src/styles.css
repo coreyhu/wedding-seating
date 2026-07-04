@@ -8,3 +8,10 @@ body { margin: 0; font-family: -apple-system, "PingFang SC", "Noto Sans SC", san
   background: #333; color: #fff; padding: 10px 14px; border-radius: 8px;
   display: flex; gap: 10px; align-items: center; z-index: 99; max-width: 92vw; }
 .toast button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; }
+
+.map { position: relative; height: 60vh; background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.floorplan { width: 100%; height: 100%; display: block; touch-action: none; }
+.seat.occupied { fill: #7a9e7e !important; }
+.seat.highlight { animation: pulse 1.1s ease-in-out infinite; fill: var(--accent) !important; stroke: var(--accent) !important; stroke-width: 3; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+.seat-label { font-size: 9px; text-anchor: middle; fill: #333; pointer-events: none; }
