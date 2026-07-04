@@ -1,6 +1,6 @@
 import { searchGuests } from '../shared/api';
 import { mountFloorplan } from '../shared/floorplan';
-import { toast } from '../shared/toast';
+import { dismissToast, toast } from '../shared/toast';
 import { prepareQuery, rankMatches } from '../logic/search';
 import { seatKey, type GuestMatch } from '../shared/types';
 
@@ -64,8 +64,10 @@ input.addEventListener('input', () => {
     const p = prepareQuery(input.value);
     if (p.kind === 'too-short') { results.innerHTML = ''; banner.hidden = true; fp.highlight(null); return; }
     lastRun = async () => {
-      try { renderResults(rankMatches(p, await searchGuests(p.q))); }
-      catch { toast('Connection trouble · 网络异常', { retry: lastRun }); }
+      try {
+        renderResults(rankMatches(p, await searchGuests(p.q)));
+        dismissToast(); // a stale connection-error toast must not outlive a successful search
+      } catch { toast('Connection trouble · 网络异常', { retry: lastRun }); }
     };
     lastRun();
   }, 250);

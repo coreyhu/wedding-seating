@@ -1,5 +1,9 @@
-export function toast(msg: string, opts: { retry?: () => void } = {}): void {
+export function dismissToast(): void {
   document.querySelector('.toast')?.remove();
+}
+
+export function toast(msg: string, opts: { retry?: () => void } = {}): void {
+  dismissToast();
   const el = document.createElement('div');
   el.className = 'toast';
   el.textContent = msg;
