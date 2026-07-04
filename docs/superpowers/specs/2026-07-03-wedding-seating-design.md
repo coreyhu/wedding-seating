@@ -36,13 +36,22 @@ Floorplan SVG: inlined into both pages at build time; chairs addressable by id.
 
 ## The SVG contract
 
-The floorplan SVG (edited in Affinity by the host) is the single source of truth for geometry. Naming convention on exported objects:
+*(Revised 2026-07-03 after inspecting the host's sample export, which drew each table as a group of 9 paths — 8 chairs + table — layered over an embedded JPEG of the venue's floorplan.)*
 
-- Each chair: `seat-{table}-{seat}`, e.g. `seat-3-5` = table 3, seat 5. Seats numbered **1–8 clockwise starting at the 12 o'clock position** of each table as drawn.
-- Each table shape: `table-{n}`, e.g. `table-3`.
-- All other artwork (walls, dance floor, labels, decoration) is ignored by the app.
+The floorplan SVG (edited in Affinity by the host) is the single source of truth for geometry.
 
-Affinity may export object names as `serif:id` rather than `id`. A build-time normalize script (`scripts/prepare-svg.ts`) copies `serif:id` → `id`, strips editor metadata, and **fails the build listing any missing seat ids** (expects the full 12×8 grid) so a bad export can't ship silently.
+**What the host does in Affinity (final export checklist):**
+1. Name each of the 12 table groups `table-1` … `table-12` in the Layers panel (each group = 8 chair paths + 1 table path, as in the sample). Nothing else needs naming.
+2. Delete the mockup content from the sample: the enlarged demo table and the hand-placed name labels. The app renders names dynamically.
+3. Keep everything else (embedded JPEG venue map, ceremony chair rows, decoration) — the app treats it as background art.
+
+**What the build script (`scripts/prepare-svg.ts`) does:**
+- Copies Affinity's `serif:id` attributes to standard `id`.
+- Within each `table-{n}` group, identifies the table (largest shape) vs. the 8 chairs, computes each chair's centroid, and derives seat numbers **1–8 clockwise from the 12 o'clock position**, injecting `id="seat-{table}-{seat}"` on each chair path.
+- Recompresses/rescales the embedded JPEG for mobile payloads.
+- **Fails the build** if any table group is missing, doesn't contain exactly 8 chairs, or — critically — if a re-export would silently renumber existing seats: the derived seat map is committed alongside the SVG and diffed on every build, so a nudged chair can't scramble assignments unnoticed.
+
+⚑ **Default chosen (awaiting confirmation):** the two 7×6 ceremony chair grids near the Altar are open seating — decoration to the app. Only the 12 reception tables are searchable/assignable.
 
 Seat assignments reference `(table_no, seat_no)` — never pixel coordinates — so the SVG can be re-exported freely without touching data.
 
@@ -93,7 +102,7 @@ create table guests (
 ## Host page (`/host`)
 
 - Gated by Supabase email/password auth (one account). RLS is the real enforcement; the login gate is UX.
-- Floorplan renders with chairs color-coded: occupied / empty. Tapping a chair opens a bottom panel:
+- Floorplan renders with chairs color-coded: occupied / empty, and each seated guest's name drawn as a small dynamic label next to their chair (the live version of the host's Affinity mockup). The guest page never renders these labels — only the searched guest's own seat, per the privacy preference. Tapping a chair opens a bottom panel:
   - **Empty chair** → searchable list of *unseated* guests → tap to assign.
   - **Occupied chair** → guest's name + actions **Unseat** and **Move** → Move enters pick-destination mode (map dims, all chairs tappable) → tapping an empty chair moves; tapping an occupied chair swaps. Escape/cancel affordance exits the mode.
 - Persistent sidebar (drawer on mobile): unseated guests with count badge.
@@ -118,4 +127,5 @@ create table guests (
 
 1. ⚑ Table labels: numeric-only default — confirm or supply custom names.
 2. ⚑ Seat-number display: shown small alongside the map highlight — confirm, or hide entirely, or make prominent (only if venue will have physical seat markers).
-3. Host to place the floorplan SVG in-repo and apply the seat/table naming convention in Affinity (checklist will be in the implementation plan).
+3. ⚑ Ceremony chair rows: unassigned/decorative default — confirm.
+4. Host to finish the floorplan in Affinity per the export checklist above (sample already in-repo as `seating_affinity.svg`).
