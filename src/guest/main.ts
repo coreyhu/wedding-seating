@@ -21,9 +21,16 @@ function showGuest(g: GuestMatch): void {
   }
   const key = seatKey(g.table_no, g.seat_no);
   banner.hidden = false;
-  banner.innerHTML = `<strong>${displayName(g)}</strong><br>` +
-    `${g.label_en ?? `Table ${g.table_no}`} · ${g.label_zh ?? `${g.table_no}号桌`}` +
-    ` <small>Seat ${g.seat_no} · ${g.seat_no}号位</small>`;
+  const name = document.createElement('strong');
+  name.textContent = displayName(g);
+  const seat = document.createElement('small');
+  seat.textContent = `Seat ${g.seat_no} · ${g.seat_no}号位`;
+  banner.replaceChildren(
+    name,
+    document.createElement('br'),
+    `${g.label_en ?? `Table ${g.table_no}`} · ${g.label_zh ?? `${g.table_no}号桌`} `,
+    seat,
+  );
   fp.highlight(key);
   fp.zoomToSeat(key);
 }
@@ -38,7 +45,11 @@ function renderResults(matches: GuestMatch[]): void {
   for (const g of matches) {
     const b = document.createElement('button');
     b.className = 'card';
-    b.innerHTML = `<span>${displayName(g)}</span><small>${g.label_en ?? ''} · ${g.label_zh ?? ''}</small>`;
+    const name = document.createElement('span');
+    name.textContent = displayName(g);
+    const where = document.createElement('small');
+    where.textContent = `${g.label_en ?? ''} · ${g.label_zh ?? ''}`;
+    b.append(name, where);
     b.onclick = () => showGuest(g);
     results.append(b);
   }
