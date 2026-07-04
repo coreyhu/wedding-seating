@@ -880,10 +880,335 @@ await page.waitForFunction(() =>
 
 ---
 
+### Task 7: Matrix seating import (replaces two-column import)
+
+**Files:**
+- Create: `supabase/migrations/0003_matrix_import.sql`, `src/logic/matrix.ts`, `src/logic/matrix.test.ts`
+- Delete: `src/logic/csv.ts`, `src/logic/csv.test.ts`
+- Rewrite: `src/host/import.ts`
+- Modify: `src/shared/api.ts` (importSeating replaces importGuests), `supabase/smoke.sql` (replace import_guests block), `docs/deploy-runbook.md` (§4 rewritten for matrix flow), `scripts/e2e.mjs` (import e2e added in Task 8's combined check — no e2e change here)
+
+**Interfaces:**
+- Consumes: `is_admin()`, deferrable `guests_one_per_seat`, `guests_identity` (v1 migration); host import panel mount point.
+- Produces: `parseSeatingMatrix(text: string): MatrixResult` where `MatrixResult = { tables: MatrixTable[]; guests: MatrixGuest[]; errors: string[] }`, `MatrixTable = { table_no: number; label_en: string; label_zh: string }`, `MatrixGuest = { name_en: string; name_zh: string; table_no: number; seat_no: number }`; api `importSeating(payload: { tables: MatrixTable[]; guests: MatrixGuest[] }): Promise<{ imported: number; new: number; unseated: number }>`; SQL `import_seating(payload jsonb) returns jsonb`. `import_guests` is GONE after this task.
+
+- [ ] **Step 1: Failing parser tests**
+
+`src/logic/matrix.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { parseSeatingMatrix } from './matrix';
+
+const HEADERS = 'Peacock / 孔雀,Owl,Kangaroo,Giraffe,Condor,Capuchin,Anteater,Toucan,Elephant,Koala,Crocodile,Lion';
+
+describe('parseSeatingMatrix', () => {
+  it('parses headers into table labels (slash-optional) and cells into seated guests', () => {
+    const r = parseSeatingMatrix(`${HEADERS}\nCarol Zhao,Connor Hsiao\n"Wang Wei / 王伟",`);
+    expect(r.errors).toEqual([]);
+    expect(r.tables[0]).toEqual({ table_no: 1, label_en: 'Peacock', label_zh: '孔雀' });
+    expect(r.tables[1]).toEqual({ table_no: 2, label_en: 'Owl', label_zh: '' });
+    expect(r.guests).toContainEqual({ name_en: 'Carol Zhao', name_zh: '', table_no: 1, seat_no: 1 });
+    expect(r.guests).toContainEqual({ name_en: 'Wang Wei', name_zh: '王伟', table_no: 1, seat_no: 2 });
+    expect(r.guests).toContainEqual({ name_en: 'Connor Hsiao', name_zh: '', table_no: 2, seat_no: 1 });
+    expect(r.guests).toHaveLength(3); // empty cells skipped
+  });
+  it('supports zh-only cells and full-width slash', () => {
+    const r = parseSeatingMatrix(`${HEADERS}\n/ 王奶奶,Eric Li ／ 李毅`);
+    expect(r.guests[0]).toEqual({ name_en: '', name_zh: '王奶奶', table_no: 1, seat_no: 1 });
+    expect(r.guests[1]).toEqual({ name_en: 'Eric Li', name_zh: '李毅', table_no: 2, seat_no: 1 });
+  });
+  it('errors: wrong header count, >8 rows in a column, in-sheet duplicate identity', () => {
+    expect(parseSeatingMatrix('A,B\nx,y').errors[0]).toMatch(/12.*headers|headers.*12/i);
+    const nine = Array.from({ length: 9 }, (_, i) => `G${i}`).join(',\n'); // col 1 gets 9 guests
+    expect(parseSeatingMatrix(`${HEADERS}\n${nine},`).errors.join(' ')).toMatch(/Peacock.*8|8.*Peacock/);
+    const dup = parseSeatingMatrix(`${HEADERS}\nSame Name,\nSame Name,`);
+    expect(dup.errors.join(' ')).toMatch(/duplicate/i);
+    expect(parseSeatingMatrix(`${HEADERS}\nBOM test,`).errors).toEqual([]);
+  });
+  it('strips BOM and tolerates CRLF + trailing empty rows', () => {
+    const r = parseSeatingMatrix(`﻿${HEADERS}\r\nCarol Zhao,\r\n\r\n`);
+    expect(r.errors).toEqual([]);
+    expect(r.guests).toHaveLength(1);
+  });
+});
+```
+
+- [ ] **Step 2: RED**, then **Step 3: implement `src/logic/matrix.ts`** (move the quoted-field `split()` helper verbatim from `csv.ts` before deleting it):
+
+```ts
+export interface MatrixTable { table_no: number; label_en: string; label_zh: string }
+export interface MatrixGuest { name_en: string; name_zh: string; table_no: number; seat_no: number }
+export interface MatrixResult { tables: MatrixTable[]; guests: MatrixGuest[]; errors: string[] }
+
+const splitName = (cell: string): { en: string; zh: string } => {
+  const i = cell.search(/[/／]/);
+  if (i < 0) return { en: cell.trim(), zh: '' };
+  return { en: cell.slice(0, i).trim(), zh: cell.slice(i + 1).trim() };
+};
+
+export function parseSeatingMatrix(text: string): MatrixResult {
+  const rows = split(text.replace(/^﻿/, '')); // split(): the v1 quoted-field CSV splitter, moved here verbatim
+  const errors: string[] = [];
+  const header = (rows[0] ?? []).map(c => c.trim());
+  while (header.length && header[header.length - 1] === '') header.pop();
+  if (header.length !== 12) errors.push(`expected 12 table-name headers, found ${header.length}`);
+  const tables: MatrixTable[] = header.slice(0, 12).map((h, i) => {
+    const { en, zh } = splitName(h);
+    return { table_no: i + 1, label_en: en, label_zh: zh };
+  });
+  const guests: MatrixGuest[] = [];
+  const seen = new Map<string, string>(); // identity -> first location
+  for (let r = 1; r < rows.length; r++) {
+    for (let c = 0; c < Math.min(rows[r]!.length, 12); c++) {
+      const cell = rows[r]![c]!.trim();
+      if (!cell || cell === '/') continue;
+      const { en, zh } = splitName(cell);
+      if (!en && !zh) continue;
+      const seat_no = guests.filter(g => g.table_no === c + 1).length + 1;
+      if (seat_no > 8) { errors.push(`${tables[c]?.label_en || `column ${c + 1}`} has more than 8 guests`); continue; }
+      const key = `${en} ${zh}`;
+      if (seen.has(key)) errors.push(`duplicate guest "${[en, zh].filter(Boolean).join(' / ')}" (${seen.get(key)} and ${tables[c]?.label_en})`);
+      else seen.set(key, tables[c]?.label_en || `column ${c + 1}`);
+      guests.push({ name_en: en, name_zh: zh, table_no: c + 1, seat_no });
+    }
+  }
+  return { tables, guests, errors };
+}
+```
+
+(Seat numbers derive from the count of non-empty cells above in the same column — blank cells don't consume a seat. This matches "row order = seat order" for dense columns, which the sheet is.)
+
+- [ ] **Step 4: Migration `supabase/migrations/0003_matrix_import.sql`:**
+
+```sql
+create or replace function import_seating(payload jsonb)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_new int; v_imported int; v_unseated int; v_expected int;
+begin
+  if not is_admin() then raise exception 'not authorized'; end if;
+  set constraints guests_one_per_seat deferred;
+
+  update tables t set
+    label_en = coalesce(nullif(trim(x.label_en), ''), format('Table %s', t.table_no)),
+    label_zh = coalesce(nullif(trim(x.label_zh), ''), format('%s号桌', t.table_no))
+  from jsonb_to_recordset(payload->'tables') as x(table_no int, label_en text, label_zh text)
+  where x.table_no = t.table_no;
+
+  insert into guests (name_en, name_zh)
+  select distinct trim(coalesce(g->>'name_en', '')), trim(coalesce(g->>'name_zh', ''))
+  from jsonb_array_elements(payload->'guests') g
+  on conflict on constraint guests_identity do nothing;
+  get diagnostics v_new = row_count;
+
+  update guests set table_no = null, seat_no = null where table_no is not null;
+
+  update guests gu
+  set table_no = (x->>'table_no')::int, seat_no = (x->>'seat_no')::int
+  from jsonb_array_elements(payload->'guests') x
+  where gu.name_en = trim(coalesce(x->>'name_en', ''))
+    and gu.name_zh = trim(coalesce(x->>'name_zh', ''));
+  get diagnostics v_imported = row_count;
+
+  select jsonb_array_length(payload->'guests') into v_expected;
+  if v_imported <> v_expected then
+    raise exception 'seat assignment mismatch: % of % guests matched', v_imported, v_expected;
+  end if;
+
+  select count(*) into v_unseated from guests where table_no is null;
+  return jsonb_build_object('imported', v_imported, 'new', v_new, 'unseated', v_unseated);
+end $$;
+
+drop function if exists import_guests(jsonb);
+revoke execute on function import_seating(jsonb) from public, anon, authenticated;
+grant execute on function import_seating(jsonb) to authenticated;
+```
+
+- [ ] **Step 5: smoke.sql** — replace the v1 `import_guests` DO-block with:
+
+```sql
+do $$
+declare r jsonb;
+begin
+  select import_seating(jsonb_build_object(
+    'tables', jsonb_build_array(jsonb_build_object('table_no', 1, 'label_en', 'Peacock', 'label_zh', '孔雀')),
+    'guests', jsonb_build_array(
+      jsonb_build_object('name_en', 'Carol Zhao', 'name_zh', '赵卡罗', 'table_no', 4, 'seat_no', 1),
+      jsonb_build_object('name_en', 'Brand New', 'name_zh', '', 'table_no', 4, 'seat_no', 2)
+    ))) into r;
+  assert (r->>'new')::int = 1, 'one new guest';
+  assert (r->>'imported')::int = 2, 'two seated';
+  assert (select label_en from tables where table_no = 1) = 'Peacock', 'label applied';
+  assert (select table_no from guests where name_en = 'Carol Zhao') = 4, 'carol moved by import';
+  assert (select count(*) from guests where name_en = 'Kevin Hu' and table_no is not null) = 0, 'absent guests unseated';
+end $$;
+```
+
+Plus a non-admin negative test for `import_seating` mirroring the existing pattern, and REMOVE the `import_guests` positive/negative asserts. `supabase db reset` + smoke → `SMOKE OK`. (db reset wipes the auth user — recreate host@test.dev + admins row per `.superpowers/sdd/progress.md` Task 9 notes before e2e.)
+
+- [ ] **Step 6: api.ts** — delete `importGuests`, add:
+
+```ts
+import type { MatrixGuest, MatrixTable } from '../logic/matrix';
+export const importSeating = async (payload: { tables: MatrixTable[]; guests: MatrixGuest[] }):
+  Promise<{ imported: number; new: number; unseated: number }> =>
+  unwrap(await supabase.rpc('import_seating', { payload }));
+```
+
+- [ ] **Step 7: rewrite `src/host/import.ts`** — same mount contract `mountImport(el, onDone)`. Structure: static instructions (`Paste the whole seating sheet as CSV — row 1 = table names, columns = tables, rows = seats.`), textarea, preview div, import button (disabled by default). On input: `parseSeatingMatrix`; if `errors.length`, render them as a red list (`.import-errors`, one `<li>` per error, textContent) and keep the button disabled; else fetch `listGuests()` once (cache), compute `newCount` (parsed identities not in DB) and `willUnseat` (DB guests seated now but absent from the sheet), and render preview via textContent: `"{guests.length} guests across 12 tables · {newCount} new · {willUnseat} will become unseated"`. On click: `importSeating({ tables, guests })` → toast `Imported ${r.imported} seats (${r.new} new guests, ${r.unseated} unseated)` → `onDone()`; failure → toast message. All CSV-derived strings via textContent (v2 XSS rule). Delete `src/logic/csv.ts` + test in this step.
+
+- [ ] **Step 8: runbook §4** — rewrite the import checklist item: export the Sheet as CSV → paste whole thing → preview must show 12 tables and the expected guest count → errors block import (fix the sheet, re-paste) → re-import any time, the sheet wins (map edits since last import are overwritten by design) → after import, spot-check one guest per side of the room.
+
+- [ ] **Step 9: Verify + commit** — `npx vitest run` green (csv tests gone, matrix tests in); `npm run check`; SMOKE OK; `git add -A -- src supabase docs scripts && git commit -m "feat: matrix seating import replacing two-column import"` (the `-A` scoped to those paths picks up the csv.ts deletions).
+
+---
+
+### Task 8: Pinyin-bridge Chinese search
+
+**Files:**
+- Create: `src/logic/pinyin-bridge.ts`, `src/logic/pinyin-bridge.test.ts`
+- Modify: `src/guest/main.ts` (zh search path), `package.json` (+tiny-pinyin), `scripts/e2e.mjs` (+1 combined matrix+bridge check)
+
+**Interfaces:**
+- Consumes: `searchGuests`, `rankMatches`, `prepareQuery` internals unchanged; Task 7's import (e2e only).
+- Produces: `candidatesFromSyllables(sylls: string[]): string[]` (pure, tested); `zhToCandidates(q: string): Promise<string[]>` (dynamic-imports tiny-pinyin; resolves `[]` on any failure).
+
+- [ ] **Step 1: Failing tests** — `src/logic/pinyin-bridge.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { candidatesFromSyllables, ROMANIZATION_VARIANTS } from './pinyin-bridge';
+
+describe('candidatesFromSyllables', () => {
+  it('orders candidates: given-first rotation, original, capped and deduped', () => {
+    const c = candidatesFromSyllables(['hu', 'xiang', 'ping']); // 胡向平
+    expect(c[0]).toBe('xiangpinghu');   // Xiang Ping Hu — the actual sheet form
+    expect(c).toContain('huxiangping');
+    expect(c.length).toBeLessThanOrEqual(8);
+    expect(new Set(c).size).toBe(c.length);
+  });
+  it('expands romanization variants one syllable at a time', () => {
+    expect(candidatesFromSyllables(['xiao', 'ming'])).toContain('minghsiao'); // 萧 family → Hsiao
+    expect(candidatesFromSyllables(['tan', 'da', 'wei'])).toContain('daweitam'); // 谭 → Tam
+  });
+  it('adds the two-syllable-surname rotation for 4+ chars', () => {
+    expect(candidatesFromSyllables(['ou', 'yang', 'jia', 'ming'])).toContain('jiamingouyang');
+  });
+  it('drops candidates shorter than 2 chars and handles single syllables', () => {
+    expect(candidatesFromSyllables(['wu'])).toEqual(expect.arrayContaining(['wu', 'ng']));
+    expect(candidatesFromSyllables([])).toEqual([]);
+  });
+});
+it('variant map stays curated (spot keys)', () => {
+  for (const k of ['xiao', 'tan', 'gao', 'zeng', 'cai', 'zhang', 'wang', 'liu', 'lin', 'xie'])
+    expect(ROMANIZATION_VARIANTS[k]).toBeDefined();
+});
+```
+
+- [ ] **Step 2: RED**, then **Step 3: implement `src/logic/pinyin-bridge.ts`:**
+
+```ts
+export const ROMANIZATION_VARIANTS: Record<string, string[]> = {
+  xiao: ['hsiao'], tan: ['tam'], wu: ['ng', 'woo'], gao: ['kao'], zeng: ['tseng'],
+  cai: ['tsai', 'choi'], liu: ['lau'], zhang: ['chang', 'cheung'], wang: ['wong'],
+  huang: ['wong'], li: ['lee'], zhao: ['chao', 'chiu'], xie: ['hsieh', 'tse'],
+  lin: ['lam'], chen: ['chan'], zhou: ['chou', 'chow'], zhu: ['chu'], xu: ['hsu'],
+  guo: ['kuo', 'kwok'], ye: ['yeh', 'yip'], he: ['ho'], mai: ['mak'], deng: ['teng'],
+  qiu: ['chiu'], jiang: ['chiang'], song: ['sung'], yang: ['yeung'], luo: ['lo', 'law'],
+  du: ['tu'], feng: ['fung'], zheng: ['cheng'], wei: ['wai'], lu: ['loo'], shi: ['shih'],
+  cui: ['tsui'], sun: ['suen'], yao: ['yiu'], liang: ['leung'], chow: ['zhou'],
+};
+const CAP = 8;
+
+export function candidatesFromSyllables(sylls: string[]): string[] {
+  if (!sylls.length) return [];
+  const orderings: string[][] = [sylls.slice(1).concat(sylls[0]!), sylls];
+  if (sylls.length >= 4) orderings.push(sylls.slice(2).concat(sylls.slice(0, 2)));
+  const out: string[] = [];
+  const push = (arr: string[]) => {
+    const s = arr.join('');
+    if (s.length >= 2 && !out.includes(s) && out.length < CAP) out.push(s);
+  };
+  for (const o of orderings) push(o);
+  for (const o of orderings)
+    for (let i = 0; i < o.length; i++)
+      for (const v of ROMANIZATION_VARIANTS[o[i]!] ?? [])
+        push([...o.slice(0, i), v, ...o.slice(i + 1)]);
+  if (sylls.length === 1) { // single char: allow bare syllable + variants even if short
+    const s = sylls[0]!;
+    if (!out.includes(s)) out.unshift(s);
+    for (const v of ROMANIZATION_VARIANTS[s] ?? []) if (!out.includes(v)) out.push(v);
+  }
+  return out.slice(0, CAP);
+}
+
+export async function zhToCandidates(q: string): Promise<string[]> {
+  try {
+    const { default: pinyin } = await import('tiny-pinyin');
+    if (!pinyin.isSupported()) return [];
+    const sylls = [...q].map(ch => pinyin.convertToPinyin(ch, '', true).toLowerCase()).filter(Boolean);
+    return candidatesFromSyllables(sylls);
+  } catch { return []; } // chunk failed to load (bad Wi-Fi) → behave as a plain miss
+}
+```
+
+`npm i tiny-pinyin`. Note the single-syllable unshift means `['wu']` yields `['wu', 'ng', 'woo']` — the test's `arrayContaining(['wu','ng'])` passes.
+
+- [ ] **Step 4: guest flow** — in `src/guest/main.ts`, inside `lastRun` replace the single fetch with:
+
+```ts
+    lastRun = async () => {
+      try {
+        let effective = p;
+        let rows = await searchGuests(p.q);
+        if (!rows.length && p.kind === 'zh') {
+          const { zhToCandidates } = await import('../logic/pinyin-bridge');
+          for (const cand of (await zhToCandidates(p.q)).slice(0, 3)) {
+            rows = await searchGuests(cand);
+            if (rows.length) { effective = { kind: 'en', q: cand }; break; }
+          }
+        }
+        renderResults(rankMatches(effective, rows));
+        dismissToast();
+      } catch { toast(t('connectionTrouble'), { retry: lastRun, retryLabel: t('retry') }); }
+    };
+```
+
+- [ ] **Step 5: e2e** (append at the END of `scripts/e2e.mjs`, after the table-rename block — it mutates seating, so last): authenticated host page pastes a 12-header matrix whose columns reproduce the SEED assignments exactly (headers `Table 1 / 1号桌` … `Table 12 / 12号桌` so labels stay default; column 1 rows: `Carol Zhao / 赵卡罗`, `Kevin Hu / 胡凯文`, `Eric Dang / 邓艾瑞`, `James Dang / 邓杰姆斯`; column 2: `Victoria Li / 李维多`, `Eric Liu / 刘艾瑞`; column 3: `/ 王奶奶`; column 4 seat 1: `Xiang Ping Hu` — the one new pinyin-only guest), clicks import, asserts the toast reports `1 new`; then a fresh guest page searches `胡向平` and asserts the banner shows `Xiang Ping Hu` (bridge path: raw 汉字 misses, candidate `xiangpinghu` hits). Post-state is a superset of seed at identical seats — reruns stay green.
+
+```js
+// ---------- MATRIX IMPORT + PINYIN BRIDGE (last: mutates seating to a seed superset) ----------
+const MATRIX = ['Table 1 / 1号桌,Table 2 / 2号桌,Table 3 / 3号桌,Table 4 / 4号桌,Table 5 / 5号桌,Table 6 / 6号桌,Table 7 / 7号桌,Table 8 / 8号桌,Table 9 / 9号桌,Table 10 / 10号桌,Table 11 / 11号桌,Table 12 / 12号桌',
+  'Carol Zhao / 赵卡罗,Victoria Li / 李维多,/ 王奶奶,Xiang Ping Hu,,,,,,,,',
+  'Kevin Hu / 胡凯文,Eric Liu / 刘艾瑞,,,,,,,,,,',
+  'Eric Dang / 邓艾瑞,,,,,,,,,,,',
+  'James Dang / 邓杰姆斯,,,,,,,,,,,'].join('\n');
+await page.click('#import-box summary');
+await page.fill('#csv', MATRIX);
+await page.waitForSelector('#csv-go:not([disabled])');
+await page.click('#csv-go');
+await page.waitForSelector('.toast', { timeout: 8000 });
+check('import: matrix toast reports 1 new guest', /1 new/.test(await page.textContent('.toast')));
+
+const bridgePage = await ctx.newPage();
+await bridgePage.goto(BASE + '/');
+await bridgePage.fill('#q', '胡向平');
+await bridgePage.waitForSelector('#banner:not([hidden])', { timeout: 8000 });
+check('bridge: 汉字 search finds pinyin-only guest', /Xiang Ping Hu/.test(await bridgePage.textContent('#banner')));
+await bridgePage.close();
+```
+
+(Keep the `#csv`/`#csv-go`/`#import-box` ids in the Task 7 rewrite so this selector set holds.)
+
+- [ ] **Step 6: Verify + commit** — `npx vitest run` green; e2e 22/22; `npm run check`; `git add src scripts/e2e.mjs package.json package-lock.json && git commit -m "feat: pinyin-bridge Chinese search with romanization variants"`
+
+---
+
 ## Verification (whole-plan)
 
-1. `npx vitest run` — all unit suites green (v1 36 + new i18n/couple/effects/floorplan/landmark tests).
-2. `psql … -f supabase/smoke.sql` → `SMOKE OK` (now includes table-label asserts).
-3. `npm run e2e` → 20/20 (14 v1-adjusted + 2 i18n + 2 eggs + 2 table-name).
+1. `npx vitest run` — all unit suites green (v1 36 − csv + new i18n/couple/effects/floorplan/landmark/matrix/pinyin tests).
+2. `psql … -f supabase/smoke.sql` → `SMOKE OK` (table-label + import_seating asserts; import_guests asserts gone).
+3. `npm run e2e` → 22/22 (14 v1-adjusted + 2 i18n + 2 eggs + 2 table-name + 1 import + 1 bridge).
 4. Visual pass on both pages at 390px: botanical theme, ✿ divider, toggle works, petals fall, sweetheart card centers on the sweetheart table.
-5. `npm run build` green; bundle delta ≤ 120KB vs v1 (`du -sh dist`).
+5. `npm run build` green; initial-load bundle delta ≤ 120KB vs v1; tiny-pinyin ships as a LAZY chunk (dynamic import) and is excluded from the initial-load budget — verify it's a separate file in `dist/assets/`.

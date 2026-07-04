@@ -10,6 +10,8 @@
 2. **Easter eggs** (user-selected): petal burst on seat-find; sweetheart celebration when the couple's names are searched.
 3. **Custom table names** — name-only display (user-selected), tap-a-table editor on the host map.
 4. **Guest-page localization** (user-requested, replacing side-by-side bilingual copy): auto-detected EN/中文 with a persistent toggle.
+5. **Matrix seating import** (user-requested after sharing the real Google Sheet, 2026-07-04): one paste imports guests + table names + full seating from the sheet's actual layout (columns = tables, rows = seats). **Replaces** the v1 two-column import.
+6. **Pinyin-bridge Chinese search** (user-requested "something more elegant" than hand-annotating Chinese names): 汉字 queries match romanized names via on-the-fly pinyin conversion + a curated romanization-variant map; slash-format (`English / 中文`) cells remain a manual override.
 
 Explicitly out of scope (offered, declined): venue-quip searches, Konami disco mode, any UI framework/component kit (Shoelace/Tailwind evaluated and rejected: ~6 already-tested component types don't justify restyling-by-rewrite).
 
@@ -86,6 +88,28 @@ Explicitly out of scope (offered, declined): venue-quip searches, Konami disco m
 - **What stays dual**: guest names render as `name_en · name_zh` in both locales — names are identity data, and seeing both forms helps guests confirm it's really them.
 - **Host page**: English-only (user choice). The v1 bilingual host strings ("Unseated · 未安排" etc.) become English during the theme pass — copy churn stays inside files the theme already touches.
 - **E2e**: a `zh-CN` browser-locale context must land on 中文 automatically; toggling to EN must swap the placeholder and a table label live.
+
+## 5. Matrix seating import
+
+Replaces the v1 two-column import end-to-end (parser, RPC, UI). The Google Sheet is the source of truth for seating.
+
+- **Input**: CSV export of the sheet. Row 1 = table display names, columns left→right = tables 1–12 (exactly 12 non-empty headers required; anything else is a preview-time error). Header cells may be `Peacock` or `Peacock / 孔雀`. Data rows: cell at (row i, column t) = guest seated at table t, seat i (row order = seat order, 1–8). More than 8 names in a column is an error naming the column. Empty cells skipped.
+- **Cell format**: `English Name`, `English / 中文`, or `/ 中文` (at least one side non-empty; both sides trimmed).
+- **Semantics (full replace)**: inside ONE transaction — upsert guests by `(name_en, name_zh)` pair; clear ALL seat assignments; assign exactly per the matrix; update all 12 table labels from headers (`label_zh` falls back to `label_en`'s default rule via the existing coalesce pattern when no `/ 中文` given: header without Chinese sets `label_zh` to the numeric default `{n}号桌`); guests in the DB but absent from the sheet end up unseated (never deleted). Duplicate `(name_en, name_zh)` pairs *within the sheet* are a preview-time error (two seats can't hold the same identity).
+- **RPC**: `import_seating(payload jsonb)` — admin-gated security definer; payload `{ tables: [{table_no, label_en, label_zh}×12], guests: [{name_en, name_zh, table_no, seat_no}] }`; returns `{ imported: int, new: int, unseated: int }` for the toast. Uses the deferrable constraint (clear-then-assign). Migration `0003_matrix_import.sql` creates it and **drops `import_guests`** (and its grants); smoke.sql asserts updated accordingly.
+- **UI**: same host import panel; preview shows per-table counts, new-guest count, how many existing DB guests would become unseated, and all errors (column overflow, in-sheet duplicates, ≠12 headers) BEFORE the import button enables.
+- **Runbook**: §4 day-before checklist rewritten for the matrix flow (paste whole sheet, check "imported = sheet cell count", re-import any time — sheet wins).
+- Table mapping note: column order = table numbers 1–12 as derived by the SVG pipeline; the host verifies Peacock physically sits at "table 1" on the map after import and, if not, renames tables via the tap editor (user chose "decide later").
+
+## 6. Pinyin-bridge Chinese search
+
+Guest-side only; no schema changes; the server's `search_guests` is called with derived Latin candidates.
+
+- **Trigger**: `prepareQuery` yields `kind: 'zh'`. First, the raw 汉字 query goes to the RPC as today (slash-override `name_zh` data still matches exactly). If zero rows come back, the bridge activates.
+- **Conversion**: `tiny-pinyin` (~80KB) is **dynamically imported on first use** — English-only users never download it. `src/logic/pinyin-bridge.ts` exposes `pinyinCandidates(zhQuery: string): string[]`: per-character toneless pinyin → candidate strings, in order: (1) given-name-first rotation (first syllable moved to end — 胡向平 → `xiangpinghu`), (2) original order (`huxiangping`), (3) two-syllable-surname rotation when ≥4 chars. Each candidate also expands through a curated **ROMANIZATION_VARIANTS** map (~40 entries: xiao→hsiao, tan→tam, wu→ng, gao→kao, zeng→tseng, cai→tsai/choi, liu→lau, zhang→chang/cheung, wang/huang→wong, li→lee, zhao→chao/chiu, xie→hsieh/tse, lin→lam, chen→chan, …), one substitution at a time, deduped, **capped at 8 candidates total**.
+- **Search loop**: candidates are tried sequentially against `search_guests` (each ≥2 Latin chars, so the RPC accepts them); first candidate returning rows wins; results ranked with the existing `'en'` ranking against that candidate. Hard cap 4 RPC calls per query (raw + 3 candidates); misses fall through to the normal empty state (zh locale copy already suggests asking at the welcome table).
+- **Non-goals**: no hanzi guessing for EN queries; heteronym surnames beyond the variant map may miss (accepted; slash override exists); no server changes.
+- **Tests**: unit tests use real sheet names (胡向平→Xiang Ping Hu; 萧→Hsiao via variant; 谭→Tam via variant); e2e: matrix-import a mini sheet in the host flow, then a 汉字 search on the guest page finds a pinyin-only guest through the bridge.
 
 ## Error handling
 
