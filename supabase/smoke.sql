@@ -47,8 +47,51 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'not authorized' then raise; end if;
   end;
+  begin
+    perform unseat(a);
+    raise exception 'non-admin wrote via unseat — is_admin gate broken';
+  exception when raise_exception then
+    if sqlerrm <> 'not authorized' then raise; end if;
+  end;
+  begin
+    perform import_guests('[{"name_en":"Intruder","name_zh":""}]'::jsonb);
+    raise exception 'non-admin wrote via import_guests — is_admin gate broken';
+  exception when raise_exception then
+    if sqlerrm <> 'not authorized' then raise; end if;
+  end;
   -- restore the admin sub for any later checks
   perform set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111"}', true);
+end $$;
+
+-- table grants + RLS must allow the intended reads (checked as the API roles,
+-- since the superuser bypasses RLS and would mask missing grants)
+do $$
+declare n int;
+begin
+  set local role authenticated;
+  select count(*) into n from guests; assert n > 0, 'authenticated reads guests';
+  select count(*) into n from tables; assert n = 12, 'authenticated reads tables';
+  reset role;
+  set local role anon;
+  select count(*) into n from tables; assert n = 12, 'anon reads tables';
+  reset role;
+end $$;
+
+-- function execute privileges: search is public-facing, writes are not
+do $$
+begin
+  assert has_function_privilege('anon', 'search_guests(text)', 'execute'),
+    'anon can execute search_guests';
+  assert has_function_privilege('authenticated', 'search_guests(text)', 'execute'),
+    'authenticated can execute search_guests';
+  assert not has_function_privilege('anon', 'assign_seat(uuid,int,int)', 'execute'),
+    'anon cannot execute assign_seat';
+  assert not has_function_privilege('anon', 'unseat(uuid)', 'execute'),
+    'anon cannot execute unseat';
+  assert not has_function_privilege('anon', 'import_guests(jsonb)', 'execute'),
+    'anon cannot execute import_guests';
+  assert has_function_privilege('authenticated', 'assign_seat(uuid,int,int)', 'execute'),
+    'authenticated can execute assign_seat';
 end $$;
 
 -- anon must not read guests directly

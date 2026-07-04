@@ -24,7 +24,10 @@ alter table guests enable row level security;
 
 create policy tables_read on tables for select to anon, authenticated using (true);
 create policy guests_read_auth on guests for select to authenticated using (true);
--- deliberately NO anon policy on guests; also revoke to fail loudly:
+-- table grants (RLS policies filter rows, but SELECT still requires a grant):
+grant select on tables to anon, authenticated;
+grant select on guests to authenticated;
+-- deliberately NO anon grant/policy on guests; also revoke to fail loudly:
 revoke all on guests from anon;
 
 -- admin allowlist: signups are disabled in config, and write RPCs additionally
@@ -34,17 +37,17 @@ create table admins (user_id uuid primary key);
 alter table admins enable row level security;  -- no policies: not readable/writable via API
 
 create or replace function is_admin() returns boolean
-language sql stable security definer set search_path = public as
+language sql stable security definer set search_path = public, extensions as
 $$ select exists (select 1 from admins where user_id = auth.uid()) $$;
 
 create or replace function normalize_en(s text) returns text
-language sql immutable as $$
+language sql immutable set search_path = public, extensions as $$
   select lower(regexp_replace(unaccent(coalesce(s, '')), '\s', '', 'g'))
 $$;
 
 create or replace function search_guests(q text)
 returns table (id uuid, name_en text, name_zh text, table_no int, seat_no int, label_en text, label_zh text)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   norm text := normalize_en(q);
   is_cjk boolean := coalesce(q, '') ~ '[一-鿿]';
@@ -67,7 +70,7 @@ begin
 end $$;
 
 create or replace function assign_seat(p_guest_id uuid, p_table_no int, p_seat_no int)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_occupant uuid;
   v_old_table int; v_old_seat int;
@@ -85,14 +88,14 @@ begin
 end $$;
 
 create or replace function unseat(p_guest_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
   if not is_admin() then raise exception 'not authorized'; end if;
   update guests set table_no = null, seat_no = null where id = p_guest_id;
 end $$;
 
 create or replace function import_guests(rows jsonb)
-returns int language plpgsql security definer set search_path = public as $$
+returns int language plpgsql security definer set search_path = public, extensions as $$
 declare v_count int;
 begin
   if not is_admin() then raise exception 'not authorized'; end if;
@@ -105,7 +108,8 @@ begin
   return v_count;
 end $$;
 
-revoke execute on all functions in schema public from anon, authenticated;
+-- default EXECUTE is granted to PUBLIC, so it must be revoked from public too:
+revoke execute on all functions in schema public from public, anon, authenticated;
 grant execute on function search_guests(text) to anon, authenticated;
 grant execute on function assign_seat(uuid, int, int) to authenticated;
 grant execute on function unseat(uuid) to authenticated;
