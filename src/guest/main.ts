@@ -108,7 +108,16 @@ input.addEventListener('input', () => {
     }
     lastRun = async () => {
       try {
-        renderResults(rankMatches(p, await searchGuests(p.q)));
+        let effective = p;
+        let rows = await searchGuests(p.q);
+        if (!rows.length && p.kind === 'zh') {
+          const { zhToCandidates } = await import('../logic/pinyin-bridge');
+          for (const cand of (await zhToCandidates(p.q)).slice(0, 3)) {
+            rows = await searchGuests(cand);
+            if (rows.length) { effective = { kind: 'en', q: cand }; break; }
+          }
+        }
+        renderResults(rankMatches(effective, rows));
         dismissToast();
       } catch { toast(t('connectionTrouble'), { retry: lastRun, retryLabel: t('retry') }); }
     };

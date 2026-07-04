@@ -1,4 +1,4 @@
-// E2E regression suite (20 checks): guest search/highlight/toast-retry/eggs, host login/assign/swap/unseat/table-rename.
+// E2E regression suite (22 checks): guest search/highlight/toast-retry/eggs, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // Host-page mutations are reverted at the end; safe against the seed data.
@@ -154,6 +154,26 @@ await page.locator('#panel input').nth(1).fill('');
 await page.locator('#panel button', { hasText: 'Save' }).click();
 await page.waitForFunction(() =>
   ![...document.querySelectorAll('.table-label')].some(t => t.textContent === 'Fern'), null, { timeout: 5000 });
+
+// ---------- MATRIX IMPORT + PINYIN BRIDGE (last: mutates seating to a seed superset) ----------
+const MATRIX = ['Table 1 / 1号桌,Table 2 / 2号桌,Table 3 / 3号桌,Table 4 / 4号桌,Table 5 / 5号桌,Table 6 / 6号桌,Table 7 / 7号桌,Table 8 / 8号桌,Table 9 / 9号桌,Table 10 / 10号桌,Table 11 / 11号桌,Table 12 / 12号桌',
+  'Carol Zhao / 赵卡罗,Victoria Li / 李维多,/ 王奶奶,Xiang Ping Hu,,,,,,,,',
+  'Kevin Hu / 胡凯文,Eric Liu / 刘艾瑞,,,,,,,,,,',
+  'Eric Dang / 邓艾瑞,,,,,,,,,,,',
+  'James Dang / 邓杰姆斯,,,,,,,,,,,'].join('\n');
+await page.click('#import-box summary');
+await page.fill('#csv', MATRIX);
+await page.waitForSelector('#csv-go:not([disabled])');
+await page.click('#csv-go');
+await page.waitForSelector('.toast', { timeout: 8000 });
+check('import: matrix toast reports 1 new guest', /1 new/.test(await page.textContent('.toast')));
+
+const bridgePage = await ctx.newPage();
+await bridgePage.goto(BASE + '/');
+await bridgePage.fill('#q', '胡向平');
+await bridgePage.waitForSelector('#banner:not([hidden])', { timeout: 8000 });
+check('bridge: 汉字 search finds pinyin-only guest', /Xiang Ping Hu/.test(await bridgePage.textContent('#banner')));
+await bridgePage.close();
 
 await browser.close();
 const failed = results.filter(r => !r.ok);
