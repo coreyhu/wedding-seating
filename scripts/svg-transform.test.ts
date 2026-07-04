@@ -43,7 +43,7 @@ describe('transformFloorplan', () => {
   });
   it('rejects a group without exactly 8 chairs', () => {
     const bad = src.replace(/<path class="chair" data-t="5" data-i="0"[^/]*\/>/, '');
-    expect(() => transformFloorplan(bad, null)).toThrow(/table-5.*8 chairs/s);
+    expect(() => transformFloorplan(bad, null)).toThrow(/table-5.*(8 chair paths|9 paths)/s);
   });
   it('diff guard: fails when an existing seat would move', () => {
     const { seatMap } = transformFloorplan(src, null);
@@ -73,5 +73,42 @@ describe('landmarks', () => {
     const prev = structuredClone(seatMap) as SeatMap & { landmarks?: unknown };
     delete (prev as unknown as Record<string, unknown>).landmarks;   // v1 seatmap.json shape
     expect(() => transformFloorplan(withLandmarks, prev as SeatMap)).not.toThrow();
+  });
+});
+
+describe('v3 Affinity export shape (circle tables, nested chair groups, auto-id noise)', () => {
+  // One table in the v3 structure: table_N > auto-named inner g > 9 sub-groups
+  // (8 wrapping a chair path each, 1 wrapping the table CIRCLE), plus ceremony
+  // chairs and container groups carrying Affinity auto-ids like chair42/table3.
+  const v3Table = (t: number, cx: number, cy: number) => {
+    const chairs = Array.from({ length: 8 }, (_, i) => {
+      const a = (i * 45 * Math.PI) / 180;
+      const x = cx + 100 * Math.sin(a), y = cy - 100 * Math.cos(a);
+      return `<g><path d="M ${x - 12} ${y - 12} L ${x + 12} ${y - 12} L ${x + 12} ${y + 12} L ${x - 12} ${y + 12} Z"/></g>`;
+    }).join('');
+    return `<g id="table_${t}"><g id="table${t === 1 ? '' : t}">${chairs}<g><circle cx="${cx}" cy="${cy}" r="60"/></g></g></g>`;
+  };
+  const v3src = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4000 3000">
+    <g id="tables">${Array.from({ length: 12 }, (_, i) => v3Table(i + 1, 300 + (i % 4) * 320, 300 + Math.floor(i / 4) * 320)).join('')}</g>
+    <g id="ceremony_seating"><g id="chair"><path d="M 10 2000 L 20 2000 L 20 2010 L 10 2010 Z"/></g><g id="chair1"><path d="M 40 2000 L 50 2000 L 50 2010 L 40 2010 Z"/></g></g>
+    <path id="dj" d="M 3000 100 L 3050 100 L 3050 150 L 3000 150 Z"/>
+    <g id="sweetheart_table"><circle cx="3500" cy="200" r="25"/></g>
+  </svg>`;
+
+  it('accepts circle-table groups and derives 96 seats with circle geometry', () => {
+    const { svg, seatMap } = transformFloorplan(v3src, null);
+    expect(Object.keys(seatMap.seats)).toHaveLength(96);
+    expect(seatMap.tables['1']).toEqual({ cx: 300, cy: 300, r: 60 });
+    expect(svg).toContain('id="table-1-shape"');
+    expect(svg).toContain('id="seat-12-8"');
+  });
+  it('excludes Affinity auto-ids from landmarks but keeps real ones', () => {
+    const { seatMap } = transformFloorplan(v3src, null);
+    const keys = Object.keys(seatMap.landmarks).sort();
+    expect(keys).toEqual(['ceremony_seating', 'dj', 'sweetheart_table']);
+  });
+  it('still rejects a malformed group with an actionable message', () => {
+    const bad = v3src.replace(/<g><circle cx="300" cy="300" r="60"\/><\/g>/, '');
+    expect(() => transformFloorplan(bad, null)).toThrow(/table_1/);
   });
 });

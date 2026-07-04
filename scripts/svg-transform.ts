@@ -61,16 +61,30 @@ export function transformFloorplan(svgText: string, prevMap: SeatMap | null): { 
     const name = nameOf(g)!;
     const t = Number(name.match(/^table[-_](\d+)$/)![1]);
     const paths = [...g.querySelectorAll('path')];
-    if (paths.length !== 9)
-      throw new Error(`${name}: expected 1 table + 8 chairs (9 paths), found ${paths.length} — check the group in Affinity`);
-    const withPts = paths.map(p => ({ p, pts: pathPoints(p.getAttribute('d') ?? '') }));
-    withPts.sort((a, b) => bboxArea(b.pts) - bboxArea(a.pts));
-    const [table, ...chairs] = withPts;
-    if (chairs.length !== 8) throw new Error(`${name}: expected 8 chairs`);
-    const c = centroid(table!.pts);
-    const xs = table!.pts.map(p => p.x);
-    seatMap.tables[String(t)] = { cx: c.x, cy: c.y, r: (Math.max(...xs) - Math.min(...xs)) / 2 };
-    table!.p.setAttribute('id', `table-${t}-shape`);
+    const groupCircles = [...g.querySelectorAll('circle')];
+    let c: Pt;
+    let chairs: Array<{ p: Element; pts: Pt[] }>;
+    if (groupCircles.length === 1 && paths.length === 8) {
+      // v3 Affinity export: the table is a <circle>, the 8 chairs are paths
+      // (each wrapped in its own auto-named <g>).
+      const circle = groupCircles[0]!;
+      c = { x: Number(circle.getAttribute('cx')), y: Number(circle.getAttribute('cy')) };
+      seatMap.tables[String(t)] = { cx: c.x, cy: c.y, r: Number(circle.getAttribute('r')) };
+      circle.setAttribute('id', `table-${t}-shape`);
+      chairs = paths.map(p => ({ p, pts: pathPoints(p.getAttribute('d') ?? '') }));
+    } else if (groupCircles.length === 0 && paths.length === 9) {
+      // v2 export: table + chairs all paths; the table is the largest shape.
+      const withPts = paths.map(p => ({ p, pts: pathPoints(p.getAttribute('d') ?? '') }));
+      withPts.sort((a, b) => bboxArea(b.pts) - bboxArea(a.pts));
+      const [table, ...rest] = withPts;
+      chairs = rest;
+      c = centroid(table!.pts);
+      const xs = table!.pts.map(p => p.x);
+      seatMap.tables[String(t)] = { cx: c.x, cy: c.y, r: (Math.max(...xs) - Math.min(...xs)) / 2 };
+      table!.p.setAttribute('id', `table-${t}-shape`);
+    } else {
+      throw new Error(`${name}: expected either 8 chair paths + 1 table circle, or 9 paths (largest = table); found ${paths.length} paths + ${groupCircles.length} circles — check the group in Affinity`);
+    }
     g.setAttribute('id', `table-${t}`);
     const chairCentroids = chairs.map(ch => centroid(ch.pts));
     const nums = seatNumbersFor(c, chairCentroids);
@@ -81,7 +95,10 @@ export function transformFloorplan(svgText: string, prevMap: SeatMap | null): { 
     });
   }
 
-  const SKIP_LANDMARK = /^(table|seat)[-_]/;
+  // Skip our injected ids (table-N…/seat-N-M) AND Affinity's auto-assigned
+  // object ids (chair, chair42, table3, tables…) — only deliberately-named
+  // venue features become landmarks.
+  const SKIP_LANDMARK = /^(?:(table|seat)[-_]|(?:tables?|seats?|chairs?)\d*$)/;
   for (const el of [...doc.querySelectorAll('[id]')]) {
     const id = el.getAttribute('id')!;
     if (el.tagName.toLowerCase() === 'svg' || id === 'guest_tables' || SKIP_LANDMARK.test(id)) continue;
@@ -96,7 +113,12 @@ export function transformFloorplan(svgText: string, prevMap: SeatMap | null): { 
   }
 
   // Tighten viewBox: the Affinity page is much taller than the drawn map.
+  // Circles (v3 table shapes) contribute their extremes too.
   const all = [...doc.querySelectorAll('path')].flatMap(p => pathPoints(p.getAttribute('d') ?? ''));
+  for (const ci of [...doc.querySelectorAll('circle')]) {
+    const cx = Number(ci.getAttribute('cx')), cy = Number(ci.getAttribute('cy')), r = Number(ci.getAttribute('r')) || 0;
+    all.push({ x: cx - r, y: cy - r }, { x: cx + r, y: cy + r });
+  }
   const xs2 = all.map(p => p.x), ys2 = all.map(p => p.y);
   const PAD = 40;
   const minX = Math.min(...xs2) - PAD, minY = Math.min(...ys2) - PAD;
