@@ -20,13 +20,24 @@ export function requireAuth(onReady: () => void): void {
         <input name="password" type="password" placeholder="Password" required />
         <button>Sign in</button>
       </form>`;
-    app.querySelector('form')!.addEventListener('submit', async e => {
+    const form = app.querySelector('form')!;
+    const submit = form.querySelector('button')!;
+    form.addEventListener('submit', async e => {
       e.preventDefault();
+      // In-flight guard: a second submit (double-click / double-Enter) while
+      // signIn() is pending would fire it concurrently and could call
+      // ready(onReady) twice. Disabling the sole submit button also blocks
+      // implicit (Enter-key) form submission.
+      if (submit.disabled) return;
+      submit.disabled = true;
       const f = new FormData(e.target as HTMLFormElement);
       try {
         await signIn(String(f.get('email')), String(f.get('password')));
-        ready(onReady);
-      } catch (err) { toast(err instanceof Error ? err.message : 'Sign-in failed'); }
+        ready(onReady); // success: stays disabled; the form is done
+      } catch (err) {
+        submit.disabled = false; // failure: keep the form usable for retry
+        toast(err instanceof Error ? err.message : 'Sign-in failed');
+      }
     });
   })();
 }
