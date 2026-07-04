@@ -1748,7 +1748,7 @@ await toFile('qr.png', url, { width: 1200, margin: 2 });
 console.log(`wrote qr.png → ${url}`);
 ```
 
-- [ ] **Step 3:** `docs/deploy-runbook.md` — the exact click-path: create Supabase project → `supabase link --project-ref <ref>` → `supabase db push` → run `seed.sql` tables-insert only (NOT sample guests) via SQL editor → Dashboard → Auth → Add user (real host account) → Netlify: import repo, set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` env vars → deploy → `npm run qr -- <url>` → print. Include the day-before checklist: real SVG through `npm run svg`, real guest CSV imported, spot-check 3 guests from a phone.
+- [ ] **Step 3:** `docs/deploy-runbook.md` — the exact click-path: create Supabase project → `supabase link --project-ref <ref>` → `supabase db push` → run `seed.sql` tables-insert only (NOT sample guests) via SQL editor → Dashboard → Auth → **disable public signups** (mirrors `enable_signup = false` locally; Task 4 security hardening) → Add user (real host account) → SQL editor: `insert into admins (user_id) values ('<that user's uuid>');` (write RPCs gate on this allowlist) → Netlify: import repo, set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` env vars → deploy → `npm run qr -- <url>` → print. Include the day-before checklist: real SVG through `npm run svg`, real guest CSV imported, spot-check 3 guests from a phone.
 
 - [ ] **Step 4: Full-suite gate** — `npm run test && npm run check && npm run build` all green.
 
