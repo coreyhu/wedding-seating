@@ -14,14 +14,26 @@ export type StringKey = keyof typeof STRINGS;
 let locale: Locale = 'en';
 const subscribers: Array<() => void> = [];
 
+// Some in-app webviews (and privacy-hardened browsers) throw on localStorage
+// access entirely — not just quota errors on setItem, but getItem too — when
+// cookies/storage are blocked. Guard both directions so localization still
+// works (falling back to navigator.language / an in-memory-only locale)
+// instead of the whole module's startup call chain throwing.
+function safeGet(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function safeSet(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch { /* storage unavailable — locale stays in-memory */ }
+}
+
 export function detectLocale(): Locale {
-  const saved = localStorage.getItem('locale');
+  const saved = safeGet('locale');
   if (saved === 'en' || saved === 'zh') return saved;
   return typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 export const getLocale = (): Locale => locale;
 export function setLocale(l: Locale): void {
-  if (locale !== l) localStorage.setItem('locale', l); // skip only the redundant persist
+  if (locale !== l) safeSet('locale', l); // skip only the redundant persist
   locale = l;
   document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en';
   document.title = STRINGS.title[l];

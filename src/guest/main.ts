@@ -35,7 +35,7 @@ function renderTableLabels(): void {
   fp.setTableLabels(labels);
 }
 
-function showGuest(g: GuestMatch): void {
+function showGuest(g: GuestMatch, opts: { resurface?: boolean } = {}): void {
   lastShown = g;
   results.replaceChildren();
   banner.className = 'banner';
@@ -53,8 +53,10 @@ function showGuest(g: GuestMatch): void {
   banner.replaceChildren(strong, document.createElement('br'),
     `${tableLabel(g)} `, small);
   fp.highlight(key);
-  fp.zoomToSeat(key);
-  burstPetals(mapEl);
+  if (!opts.resurface) {
+    fp.zoomToSeat(key);
+    burstPetals(mapEl);
+  }
 }
 
 function renderResults(matches: GuestMatch[]): void {
@@ -128,7 +130,7 @@ input.addEventListener('input', () => {
 langToggle.addEventListener('click', () => setLocale(getLocale() === 'en' ? 'zh' : 'en'));
 onLocaleChange(() => {
   renderStatics();
-  if (lastShown) showGuest(lastShown);
+  if (lastShown) showGuest(lastShown, { resurface: true });
   else if (lastMatches) renderResults(lastMatches);
 });
 

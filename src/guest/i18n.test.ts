@@ -41,3 +41,17 @@ it('pickLabel picks by locale with cross-fallback', () => {
   expect(pickLabel('Fern', '')).toBe('Fern');
   expect(pickLabel(null, null)).toBe('');
 });
+it('survives a localStorage that throws (cookie-blocked webviews): falls back to navigator, still notifies', () => {
+  vi.stubGlobal('localStorage', {
+    getItem: () => { throw new Error('blocked'); },
+    setItem: () => { throw new Error('blocked'); },
+    clear: () => {},
+  });
+  vi.stubGlobal('navigator', { language: 'zh-CN' });
+  expect(detectLocale()).toBe('zh');
+  const cb = vi.fn();
+  onLocaleChange(cb);
+  expect(() => setLocale('zh')).not.toThrow();
+  expect(cb).toHaveBeenCalled();
+  vi.unstubAllGlobals();
+});

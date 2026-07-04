@@ -115,6 +115,10 @@ URL could otherwise create an account. Before adding the real host user:
       touch-ups *after* the last import of the day, not before. Guests absent
       from the sheet are unseated, never deleted. After importing, spot-check
       one guest from each side of the room to confirm they land correctly.
+- [ ] After the final import, glance at the host page's unseated list and the
+      preview's new-guest count — the parser can't tell a real guest from
+      sheet noise (e.g. `Kevin Hu +1`, truncated `<Visa Pend…` cells), so
+      noise imports as real seated guests; clean the Sheet, not the app.
 
 ## Floorplan re-export loop (for future edits, e.g. Task 14)
 

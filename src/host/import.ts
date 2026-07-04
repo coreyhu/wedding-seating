@@ -60,7 +60,7 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
     const sheetIds = new Set(guests.map(identity));
     const newCount = guests.filter(g => !existingIds.has(identity(g))).length;
     const willUnseat = existing.filter(g => g.table_no != null && !sheetIds.has(identity(g))).length;
-    preview.textContent = `${guests.length} guests across 12 tables · ${newCount} new · ${willUnseat} will become unseated`;
+    preview.textContent = `${guests.length} guests across 12 tables · ${newCount} new · ${willUnseat} will become unseated · table names updated from row 1`;
     go.disabled = false;
   }
 
