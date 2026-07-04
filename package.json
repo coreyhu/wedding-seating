@@ -10,7 +10,8 @@
     "test": "vitest run",
     "devmap": "tsx scripts/make-dev-floorplan.ts",
     "svg": "tsx scripts/prepare-svg.ts",
-    "qr": "tsx scripts/make-qr.ts"
+    "qr": "tsx scripts/make-qr.ts",
+    "e2e": "node scripts/e2e.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
@@ -21,6 +22,7 @@
     "@types/svg-pan-zoom": "^3.3.0",
     "jsdom": "^29.1.1",
     "linkedom": "^0.18.12",
+    "playwright": "^1.61.1",
     "qrcode": "^1.5.4",
     "sharp": "^0.35.3",
     "tsx": "^4.23.0",
