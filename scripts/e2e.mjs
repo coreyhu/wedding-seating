@@ -83,9 +83,14 @@ await page.fill('#q', '');
 await page.locator('.chip', { hasText: 'Restrooms' }).click();
 await page.waitForSelector('#banner:not([hidden])');
 check('amenities: chip zooms and banners', /🚻/.test(await page.textContent('#banner')));
+// park the banner on a DIFFERENT amenity (🍸) first so the zh check proves a real
+// 🍸→🚻 transition — one only a working zh matchAmenity can cause, not a stale banner.
+await page.locator('.chip', { hasText: 'Bar' }).click();
+await page.waitForFunction(() => !document.querySelector('#banner').hidden && document.querySelector('#banner').textContent.includes('🍸'), null, { timeout: 4000 });
 await page.fill('#q', '洗手间');
 await page.waitForFunction(() => !document.querySelector('#banner').hidden && document.querySelector('#banner').textContent.includes('🚻'), null, { timeout: 4000 });
-check('amenities: zh keyword search finds restroom', true);
+const zhBanner = await page.textContent('#banner');
+check('amenities: zh keyword search finds restroom', /🚻/.test(zhBanner) && !/🍸/.test(zhBanner), zhBanner.trim().slice(0, 40));
 
 // ---------- HOST PAGE ----------
 await page.goto(BASE + '/host.html');
