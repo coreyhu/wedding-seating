@@ -95,6 +95,19 @@ export function mountFloorplan(container: HTMLElement,
     };
     svg.addEventListener('pointerup', endTouch);
     svg.addEventListener('pointercancel', endTouch);
+
+    // iOS Safari claims two-finger gestures for its native pinch recognizer even
+    // with touch-action: none, firing pointercancel and killing the gesture (the
+    // reason pinch "did nothing" on iPhone while one-finger pan worked). Blocking
+    // the default ONLY for multi-touch keeps the pointer stream alive; single
+    // touches are left alone so taps still synthesize clicks.
+    const blockNativeMultiTouch = (e: TouchEvent) => {
+      if (e.touches.length > 1) e.preventDefault();
+    };
+    svg.addEventListener('touchstart', blockNativeMultiTouch, { passive: false });
+    svg.addEventListener('touchmove', blockNativeMultiTouch, { passive: false });
+    // Older-iOS proprietary gesture events: stop Safari's page zoom outright.
+    svg.addEventListener('gesturestart' as keyof SVGSVGElementEventMap, (e: Event) => e.preventDefault());
   }
 
   const seatEl = (key: SeatKey) => svg.querySelector<SVGGraphicsElement>(`#seat-${escapeId(key)}`)
