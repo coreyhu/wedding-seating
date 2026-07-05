@@ -52,6 +52,8 @@ export function mountFloorplan(container: HTMLElement,
     // svg-pan-zoom has no touch support; hand-rolled pinch/pan for non-mouse pointers.
     let debugNote: ((s: string) => void) | undefined; // set only under ?fpdebug
     let zMin = Infinity, zMax = -Infinity;
+    let nSkips = 0;
+    const series: string[] = [];
     const moveCounts = new Map<number, number>();
     const touches = new Map<number, { x: number; y: number }>();
     let pinchDist = 0;
@@ -88,18 +90,20 @@ export function mountFloorplan(container: HTMLElement,
           try {
             const rect = svg.getBoundingClientRect();
             const m = mid();
-            const reqZoom = pz!.getZoom() * (d / pinchDist);
+            const ratio = d / pinchDist;
+            const reqZoom = pz!.getZoom() * ratio;
             pz!.zoomAtPoint(reqZoom, { x: m.x - rect.left, y: m.y - rect.top });
             if (debugNote) {
               const z = pz!.getZoom();
               zMin = Math.min(zMin, z); zMax = Math.max(zMax, z);
-              const pts = [...touches.values()].map(p => `(${p.x | 0},${p.y | 0})`).join(' ');
-              debugNote(`z=${z.toFixed(3)} MAX=${zMax.toFixed(3)} d=${d | 0}\nfingers ${pts}`);
+              series.push(`d=${d | 0} r=${ratio.toFixed(3)} z=${z.toFixed(3)}`);
+              if (series.length > 7) series.shift();
+              debugNote(`MAX=${zMax.toFixed(3)} skips=${nSkips}\n${series.join('\n')}`);
             }
           } catch (err) {
             debugNote?.(`PINCH ERR: ${String(err).slice(0, 120)}`);
           }
-        }
+        } else if (debugNote) { nSkips++; }
         pinchDist = d;
       }
     });
