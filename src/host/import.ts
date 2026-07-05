@@ -61,6 +61,7 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
     if (new Set(mapping).size !== mapping.length) {
       errorsEl.replaceChildren(li('Each venue table can be used once — two groups map to the same table.'));
       go.disabled = true;
+      token++;   // invalidate any in-flight refreshPreview so it can't re-enable Import
       return;
     }
     errorsEl.replaceChildren();
