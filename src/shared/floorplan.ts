@@ -49,6 +49,7 @@ export function mountFloorplan(container: HTMLElement,
     });
 
     // svg-pan-zoom has no touch support; hand-rolled pinch/pan for non-mouse pointers.
+    let debugNote: ((s: string) => void) | undefined; // set only under ?fpdebug
     const touches = new Map<number, { x: number; y: number }>();
     let pinchDist = 0;
     let gestureActive = false;
@@ -80,10 +81,15 @@ export function mountFloorplan(container: HTMLElement,
         e.preventDefault();
         const d = dist();
         if (pinchDist > 0 && d > 0) {
-          const rect = svg.getBoundingClientRect();
-          const m = mid();
-          pz!.zoomAtPoint(pz!.getZoom() * (d / pinchDist),
-            { x: m.x - rect.left, y: m.y - rect.top });
+          try {
+            const rect = svg.getBoundingClientRect();
+            const m = mid();
+            pz!.zoomAtPoint(pz!.getZoom() * (d / pinchDist),
+              { x: m.x - rect.left, y: m.y - rect.top });
+            debugNote?.(`pinch ok r=${(d / pinchDist).toFixed(3)} z=${pz!.getZoom().toFixed(2)}`);
+          } catch (err) {
+            debugNote?.(`PINCH ERR: ${String(err).slice(0, 120)}`);
+          }
         }
         pinchDist = d;
       }
@@ -117,8 +123,10 @@ export function mountFloorplan(container: HTMLElement,
       hud.style.cssText = 'position:fixed;bottom:4px;left:4px;z-index:999;background:rgba(0,0,0,.78);color:#7CFC00;font:12px/1.5 monospace;padding:6px 8px;border-radius:6px;pointer-events:none;white-space:pre';
       document.body.append(hud);
       const n: Record<string, number> = { down: 0, move: 0, up: 0, cancel: 0, tstart: 0, tmove: 0, gstart: 0 };
+      let note = '';
+      debugNote = (s: string) => { note = s; paint(); };
       const paint = () => {
-        hud.textContent = `pointer down:${n.down} move:${n.move} up:${n.up}\nCANCEL:${n.cancel}  touches.size:${touches.size}\ntouchstart:${n.tstart} touchmove:${n.tmove} gesture:${n.gstart}\nzoom:${pz!.getZoom().toFixed(2)}`;
+        hud.textContent = `pointer down:${n.down} move:${n.move} up:${n.up}\nCANCEL:${n.cancel}  touches.size:${touches.size}\ntouchstart:${n.tstart} touchmove:${n.tmove} gesture:${n.gstart}\nzoom:${pz!.getZoom().toFixed(2)}\n${note}`;
       };
       const count = (ev: string, k: string) => svg.addEventListener(ev as keyof SVGSVGElementEventMap, () => { n[k] = (n[k] ?? 0) + 1; paint(); });
       count('pointerdown', 'down'); count('pointermove', 'move'); count('pointerup', 'up');
