@@ -122,7 +122,7 @@ function renderTablemates(rows: Tablemate[], selfId: string): void {
 async function loadTablemates(g: GuestMatch, gen: number): Promise<void> {
   try {
     const rows = await tableGuests(g.id);
-    if (gen !== tablematesGen) return;       // superseded OR same-guest re-entry
+    if (gen !== tablematesGen || lastShown?.id !== g.id) return; // superseded, re-entry, OR banner now shows something else
     lastTablemates = rows;
     renderTablemates(rows, g.id);
   } catch { /* supplementary — the seat already rendered; skip silently (spec) */ }
