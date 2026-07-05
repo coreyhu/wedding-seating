@@ -70,3 +70,11 @@ it('animated zoomToPoint stays a safe no-op without panZoom and cancels cleanly'
   const fp = mount();
   expect(() => { fp.zoomToPoint(1, 2); fp.zoomToPoint(3, 4); }).not.toThrow();
 });
+it('setLandmarkLabels draws at landmark coords and replaces on re-call', () => {
+  const fp = mount();
+  fp.setLandmarkLabels({ sweetheart_table: 'Bar' });
+  fp.setLandmarkLabels({ sweetheart_table: '酒吧' });
+  const els = container.querySelectorAll('.landmark-label');
+  expect(els).toHaveLength(1);
+  expect(els[0]!.textContent).toBe('酒吧');
+});

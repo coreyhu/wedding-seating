@@ -41,6 +41,9 @@ body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(-
 .overlay .searchbar input { border: 0; outline: none; width: 100%; font-size: 16px; padding: 8px 10px; background: transparent; }
 .overlay .searchbar:focus-within { outline: 2px solid var(--accent); }
 .results { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 40vh; }
+.chips { display: flex; gap: 6px; overflow-x: auto; pointer-events: auto; padding: 2px; scrollbar-width: none; }
+.chip { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; border-radius: 999px;
+  padding: 7px 12px; font-size: 14px; color: var(--accent-deep); box-shadow: var(--shadow); cursor: pointer; }
 
 .map { position: relative; height: 60vh; background: #fff; border: 1px solid var(--line);
   border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
@@ -52,6 +55,7 @@ body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(-
 .seat-label { font-size: 9px; text-anchor: middle; fill: #333; pointer-events: none; }
 .table-label { font-size: 11px; text-anchor: middle; fill: var(--accent-deep); pointer-events: none;
   font-weight: 600; }
+.landmark-label { font-size: 10px; text-anchor: middle; fill: var(--gold); pointer-events: none; }
 
 .petal { position: absolute; top: -20px; font-size: 16px; pointer-events: none; z-index: 5;
   animation: petal-fall 1.6s ease-in forwards; }

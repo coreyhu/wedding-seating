@@ -1,4 +1,4 @@
-// E2E regression suite (23 checks): guest search/highlight/toast-retry/eggs/layout, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
+// E2E regression suite (25 checks): guest search/highlight/toast-retry/eggs/layout/amenities, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // Host-page mutations are reverted at the end; safe against the seed data.
@@ -77,6 +77,15 @@ await zhCtx.close();
 const mapBox = await page.locator('#map').boundingBox();
 const vp = page.viewportSize();
 check('layout: map fills the viewport', mapBox.width >= vp.width - 2 && mapBox.height >= vp.height - 2);
+
+// ---------- AMENITIES ----------
+await page.fill('#q', '');
+await page.locator('.chip', { hasText: 'Restrooms' }).click();
+await page.waitForSelector('#banner:not([hidden])');
+check('amenities: chip zooms and banners', /🚻/.test(await page.textContent('#banner')));
+await page.fill('#q', '洗手间');
+await page.waitForFunction(() => !document.querySelector('#banner').hidden && document.querySelector('#banner').textContent.includes('🚻'), null, { timeout: 4000 });
+check('amenities: zh keyword search finds restroom', true);
 
 // ---------- HOST PAGE ----------
 await page.goto(BASE + '/host.html');

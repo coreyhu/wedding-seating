@@ -15,6 +15,7 @@ export interface Floorplan {
   zoomToLandmark(id: string): void;
   onTap(cb: (hit: { kind: 'seat'; key: SeatKey } | { kind: 'table'; tableNo: number }) => void): void;
   setTableLabels(labels: Record<number, string>): void;
+  setLandmarkLabels(labels: Record<string, string>): void;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -128,6 +129,18 @@ export function mountFloorplan(container: HTMLElement,
         const el = document.createElementNS(SVG_NS, 'text');
         el.setAttribute('x', String(tb.cx)); el.setAttribute('y', String(tb.cy - tb.r - 6));
         el.setAttribute('class', 'table-label');
+        el.textContent = text;
+        svg.append(el);
+      }
+    },
+    setLandmarkLabels(labels) {
+      svg.querySelectorAll('.landmark-label').forEach(e => e.remove());
+      for (const [id, text] of Object.entries(labels)) {
+        const lm = seatMap.landmarks[id];
+        if (!lm || !text) continue;
+        const el = document.createElementNS(SVG_NS, 'text');
+        el.setAttribute('x', String(lm.cx)); el.setAttribute('y', String(lm.cy));
+        el.setAttribute('class', 'landmark-label');
         el.textContent = text;
         svg.append(el);
       }

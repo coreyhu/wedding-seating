@@ -7,11 +7,13 @@ import { seatKey, type GuestMatch, type TableInfo } from '../shared/types';
 import { detectLocale, getLocale, onLocaleChange, pickLabel, seatText, setLocale, t } from './i18n';
 import { burstPetals } from './effects';
 import { COUPLE, matchesCouple } from './couple';
+import { AMENITIES, matchAmenity, type Amenity } from './amenities';
 
 const fp = mountFloorplan(document.querySelector('#map')!);
 const input = document.querySelector<HTMLInputElement>('#q')!;
 const results = document.querySelector<HTMLElement>('#results')!;
 const banner = document.querySelector<HTMLElement>('#banner')!;
+const chips = document.querySelector<HTMLElement>('#chips')!;
 const langToggle = document.querySelector<HTMLButtonElement>('#lang-toggle')!;
 const mapEl = document.querySelector<HTMLElement>('#map')!;
 
@@ -27,12 +29,29 @@ function renderStatics(): void {
   input.placeholder = t('placeholder');
   langToggle.textContent = t('toggle');
   renderTableLabels();
+  renderLandmarkLabels();
+  renderChips();
 }
 
 function renderTableLabels(): void {
   const labels: Record<number, string> = {};
   for (const tb of tables) labels[tb.table_no] = pickLabel(tb.label_en, tb.label_zh);
   fp.setTableLabels(labels);
+}
+
+function renderChips(): void {
+  chips.replaceChildren();
+  for (const a of AMENITIES) {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.textContent = `${a.emoji} ${a.name[getLocale()]}`;
+    b.onclick = () => showAmenity(a);
+    chips.append(b);
+  }
+}
+
+function renderLandmarkLabels(): void {
+  fp.setLandmarkLabels(Object.fromEntries(AMENITIES.map(a => [a.id, a.name[getLocale()]])));
 }
 
 function showGuest(g: GuestMatch, opts: { resurface?: boolean } = {}): void {
@@ -57,6 +76,17 @@ function showGuest(g: GuestMatch, opts: { resurface?: boolean } = {}): void {
     fp.zoomToSeat(key);
     burstPetals(mapEl);
   }
+}
+
+function showAmenity(a: Amenity): void {
+  lastShown = null;
+  lastMatches = null;
+  results.replaceChildren();
+  banner.className = 'banner';
+  banner.hidden = false;
+  banner.textContent = `${a.emoji} ${a.name[getLocale()]}`;
+  fp.highlight(null);
+  fp.zoomToLandmark(a.id);
 }
 
 function renderResults(matches: GuestMatch[]): void {
@@ -108,6 +138,8 @@ input.addEventListener('input', () => {
       burstPetals(mapEl, { count: 48 });
       return;
     }
+    const am = matchAmenity(p);
+    if (am) { showAmenity(am); return; }
     lastRun = async () => {
       try {
         let effective = p;
