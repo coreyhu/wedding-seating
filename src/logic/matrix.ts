@@ -37,6 +37,57 @@ export function parseSeatingMatrix(text: string): MatrixResult {
   return { tables, guests, errors };
 }
 
+// mapping[c] = venue table number (1..12) for column index c (0-based).
+// parseSeatingMatrix assigns column c the provisional table_no = c+1, so a table
+// with provisional number k came from column k-1 and maps to mapping[k-1].
+// seat_no is within-column ordering and is left untouched. Identity mapping
+// [1..12] reproduces the positional output exactly.
+export function remapColumnsToTables(r: MatrixResult, mapping: number[]): MatrixResult {
+  const valid = mapping.length === 12
+    && mapping.every(n => Number.isInteger(n) && n >= 1 && n <= 12)
+    && new Set(mapping).size === 12;
+  if (!valid) {
+    return { ...r, errors: [...r.errors, `invalid table mapping: expected a permutation of 1–12, got [${mapping.join(', ')}]`] };
+  }
+  const to = (provisional: number): number => mapping[provisional - 1]!;
+  return {
+    errors: r.errors,
+    tables: r.tables.map(t => ({ ...t, table_no: to(t.table_no) })),
+    guests: r.guests.map(g => ({ ...g, table_no: to(g.table_no) })),
+  };
+}
+
+// Default dropdown values: prefer the venue table each group already occupies
+// (matched by current label), else fill with the lowest unused number. ALWAYS
+// returns a permutation of 1..12. First import (labels still "Table N") → identity.
+export function defaultMapping(
+  tables: MatrixTable[],
+  existing: { table_no: number; label_en: string; label_zh: string }[],
+): number[] {
+  const normEn = (s: string): string => s.trim().toLowerCase();
+  const byEn = new Map<string, number>();
+  const byZh = new Map<string, number>();
+  for (const e of existing) {
+    if (e.label_en.trim()) byEn.set(normEn(e.label_en), e.table_no);
+    if (e.label_zh.trim()) byZh.set(e.label_zh.trim(), e.table_no);
+  }
+  const used = new Set<number>();
+  const result: (number | null)[] = tables.map(() => null);
+  tables.forEach((t, i) => {
+    const match = (t.label_en.trim() ? byEn.get(normEn(t.label_en)) : undefined)
+      ?? (t.label_zh.trim() ? byZh.get(t.label_zh.trim()) : undefined);
+    if (match !== undefined && !used.has(match)) { result[i] = match; used.add(match); }
+  });
+  let next = 1;
+  for (let i = 0; i < result.length; i++) {
+    if (result[i] === null) {
+      while (used.has(next)) next++;
+      result[i] = next; used.add(next);
+    }
+  }
+  return result as number[];
+}
+
 // v1 quoted-field CSV splitter, moved here verbatim from csv.ts.
 function split(text: string): string[][] {
   const out: string[][] = [];
