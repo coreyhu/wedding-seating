@@ -89,3 +89,9 @@ body.picking .seat:not(.highlight) { opacity: 0.75; }
   border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px;
   box-shadow: var(--shadow); white-space: nowrap; max-width: calc(100vw - 24px); }
 .credits .heart { color: var(--highlight); }
+
+.tablemates { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.tablemates .tablemates-head { display: block; color: var(--gold); margin-bottom: 4px; }
+.tablemates ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.tablemates li { font-size: 15px; color: var(--ink); }
+.tablemates strong { font-family: var(--serif); color: var(--accent-deep); }

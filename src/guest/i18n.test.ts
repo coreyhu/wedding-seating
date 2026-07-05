@@ -67,3 +67,10 @@ it('credits key exists in both locales and contains a heart', () => {
   expect(t('credits')).toContain('♥');
   expect(t('credits')).toContain('Corey Hu');
 });
+it('at-your-table keys exist in both locales', () => {
+  expect(t('atYourTable')).toBe('At your table');
+  expect(t('you')).toBe('You');
+  setLocale('zh');
+  expect(t('atYourTable')).toBe('同桌宾客');
+  expect(t('you')).toBe('您');
+});

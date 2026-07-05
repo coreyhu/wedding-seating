@@ -9,6 +9,8 @@ const STRINGS = {
   retry: { en: 'Retry', zh: '重试' },
   toggle: { en: '中文', zh: 'EN' }, // the language you'd switch TO
   credits: { en: 'Made with ♥ by Lindsey Tam & Corey Hu', zh: 'Lindsey Tam 与 Corey Hu 用 ♥ 制作' },
+  atYourTable: { en: 'At your table', zh: '同桌宾客' },
+  you: { en: 'You', zh: '您' },
 } as const;
 export type StringKey = keyof typeof STRINGS;
 

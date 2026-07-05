@@ -1,13 +1,14 @@
 import '@fontsource/fraunces/600.css';
-import { searchGuests, listTables } from '../shared/api';
+import { searchGuests, listTables, tableGuests } from '../shared/api';
 import { mountFloorplan } from '../shared/floorplan';
 import { dismissToast, toast } from '../shared/toast';
 import { prepareQuery, rankMatches } from '../logic/search';
-import { seatKey, type GuestMatch, type TableInfo } from '../shared/types';
+import { seatKey, type GuestMatch, type TableInfo, type Tablemate } from '../shared/types';
 import { detectLocale, getLocale, onLocaleChange, pickLabel, seatText, setLocale, t } from './i18n';
 import { burstPetals } from './effects';
 import { COUPLE, matchesCouple } from './couple';
 import { AMENITIES, matchAmenity, type Amenity } from './amenities';
+import { tablemateRows } from './tablemates';
 
 const fp = mountFloorplan(document.querySelector('#map')!);
 const input = document.querySelector<HTMLInputElement>('#q')!;
@@ -20,8 +21,10 @@ const mapEl = document.querySelector<HTMLElement>('#map')!;
 let tables: TableInfo[] = [];
 let lastMatches: GuestMatch[] | null = null;
 let lastShown: GuestMatch | null = null;
+let lastTablemates: Tablemate[] | null = null;
+let tablematesGen = 0;
 
-const displayName = (g: GuestMatch) => [g.name_en, g.name_zh].filter(Boolean).join(' · ');
+const displayName = (g: { name_en: string; name_zh: string }) => [g.name_en, g.name_zh].filter(Boolean).join(' · ');
 const tableLabel = (g: GuestMatch) => pickLabel(g.label_en, g.label_zh);
 
 function renderStatics(): void {
@@ -82,10 +85,47 @@ function showGuest(g: GuestMatch, opts: { resurface?: boolean } = {}): void {
   banner.replaceChildren(strong, document.createElement('br'),
     `${tableLabel(g)} `, small);
   fp.highlight(key);
-  if (!opts.resurface) {
+  if (opts.resurface) {
+    if (lastTablemates) renderTablemates(lastTablemates, g.id); // locale toggle: no refetch
+  } else {
     fp.zoomToSeat(key);
     burstPetals(mapEl);
+    lastTablemates = null;
+    void loadTablemates(g, ++tablematesGen);
   }
+}
+
+function renderTablemates(rows: Tablemate[], selfId: string): void {
+  const list = tablemateRows(rows, selfId);
+  if (list.length === 0) return; // solo at table → skip the section
+  const section = document.createElement('div');
+  section.className = 'tablemates';
+  const head = document.createElement('small');
+  head.className = 'tablemates-head';
+  head.textContent = t('atYourTable');
+  const ul = document.createElement('ul');
+  for (const r of list) {
+    const item = document.createElement('li');
+    if (r.isSelf) {
+      const me = document.createElement('strong');
+      me.textContent = `${displayName(r)} · ${t('you')}`;
+      item.append(me);
+    } else {
+      item.textContent = displayName(r);
+    }
+    ul.append(item);
+  }
+  section.append(head, ul);
+  banner.append(section);
+}
+
+async function loadTablemates(g: GuestMatch, gen: number): Promise<void> {
+  try {
+    const rows = await tableGuests(g.id);
+    if (gen !== tablematesGen) return;       // superseded OR same-guest re-entry
+    lastTablemates = rows;
+    renderTablemates(rows, g.id);
+  } catch { /* supplementary — the seat already rendered; skip silently (spec) */ }
 }
 
 function showAmenity(a: Amenity): void {
