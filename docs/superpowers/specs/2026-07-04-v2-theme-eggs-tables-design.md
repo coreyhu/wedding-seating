@@ -143,13 +143,16 @@ svg-pan-zoom ships no touch support — desktop scroll/drag works, phones cannot
 - E2e: a CDP-synthesized pinch on the guest map must change the viewport transform scale.
 - Runbook note: phone-testing the DEV server needs `vite --host` + `.env.local`'s Supabase URL set to the Mac's LAN IP (127.0.0.1 on a phone is the phone) — one paragraph under a new "Testing from a phone" heading.
 
-## 10. Delete unseated guests (user-requested 2026-07-05)
+## 10. Import override — the sheet IS the guest list (user-requested 2026-07-05, supersedes the earlier delete-unseated-guests design; the per-guest × was explicitly dropped)
 
-- Host sidebar: each unseated guest card gains a small × button. First tap arms it (button text becomes "Delete?", auto-disarms after 3s); second tap deletes via RPC and refreshes.
-- **RPC `delete_guest(p_guest_id uuid)`** (migration `0004_delete_guest.sql`): admin-gated; raises `'guest is seated'` if `table_no is not null` (unseat first — a mis-tap can never remove someone from a table); raises `'unknown guest'` if no row. Standard grants pattern.
-- Import interplay (documented in runbook §4): deletion is permanent, but a name still present in the sheet is re-created by the next import — clean the sheet AND delete in-app for stray entries.
-- Seated guests: no delete affordance shown at all.
-- Tests: smoke (delete unseated ✓, refuse seated ✓, non-admin rejected ✓); e2e: import a throwaway guest via the matrix panel, re-import without them (→ unseated), × ×, gone from sidebar — leaves state rerun-stable.
+Root problem: editing a cell's name (e.g. adding `/ 中文`) changes the identity pair, so re-imports created new rows and left the old spelling as an unseated ghost — duplicate-looking guests in search.
+
+- **Semantics change in `import_seating` (migration `0004_import_override.sql`, create-or-replace):** after upserting and assigning exactly per the sheet, **guests absent from the payload are DELETED** (previously: left unseated). Return becomes `{imported, new, deleted}`.
+- **Preview** must show the deletion count prominently BEFORE the button arms: `… · N will be DELETED (absent from sheet)` styled as a warning when N > 0 — this is the guard against partial pastes wiping the list.
+- **Toast** reports `Imported X seats (Y new, Z deleted)`.
+- Day-of one-off removals: unseat on the map, remove the row from the Sheet, re-import (one flow, no extra UI).
+- **E2e choreography rework** (the old flow relied on seed guests staying unseated across the import, which full-override deletes): the host section starts by UNSEATING a seated guest and uses them for the assign/move tests (restoring at the end); the matrix block's post-import state has zero unseated guests, which reruns must tolerate. Smoke asserts absentees are deleted (count drops) and the `deleted` field is returned.
+- Runbook §4: override semantics rewritten — the sheet is the complete guest list; partial pastes are the one hazard; watch the DELETED count in the preview.
 
 ## Testing
 

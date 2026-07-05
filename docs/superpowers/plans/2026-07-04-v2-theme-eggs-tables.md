@@ -1502,50 +1502,45 @@ check('mobile: pinch zooms the map', beforeMatrix !== '' && beforeMatrix !== aft
 
 ---
 
-### Task 12: Delete unseated guests
+### Task 13: Import override — absentees deleted (supersedes Task 12, never merged)
 
 **Files:**
-- Create: `supabase/migrations/0004_delete_guest.sql`
-- Modify: `supabase/smoke.sql` (+3 asserts), `src/shared/api.ts` (+deleteGuest), `src/host/main.ts` (sidebar × with arm/confirm), `src/styles.css` (.unseated-row/.delete-btn), `scripts/e2e.mjs` (+1 check), `docs/deploy-runbook.md` (§4 note)
+- Create: `supabase/migrations/0004_import_override.sql`
+- Modify: `supabase/smoke.sql` (import block asserts), `src/shared/api.ts` (importSeating return type), `src/host/import.ts` (preview + toast wording), `src/styles.css` (.preview-warn), `scripts/e2e.mjs` (host-section + import-block choreography), `docs/deploy-runbook.md` (§4)
 
 **Interfaces:**
-- Produces: SQL `delete_guest(p_guest_id uuid)`; api `deleteGuest(guestId: string): Promise<void>`.
+- `import_seating(payload jsonb)` now returns `{imported: int, new: int, deleted: int}`; api type follows. Parser and payload shape unchanged.
 
-- [ ] **Step 1: Migration**
+- [ ] **Step 1: Migration** — `create or replace function import_seating` identical to 0003's body EXCEPT: the absentee step becomes a DELETE, placed after assignments:
 
 ```sql
-create or replace function delete_guest(p_guest_id uuid)
-returns void language plpgsql security definer set search_path = public, extensions as $$
-declare v_table int;
-begin
-  if not is_admin() then raise exception 'not authorized'; end if;
-  select table_no into v_table from guests where id = p_guest_id;
-  if not found then raise exception 'unknown guest'; end if;
-  if v_table is not null then raise exception 'guest is seated'; end if;
-  delete from guests where id = p_guest_id;
-end $$;
-
-revoke execute on function delete_guest(uuid) from public, anon, authenticated;
-grant execute on function delete_guest(uuid) to authenticated;
+  delete from guests g
+  where not exists (
+    select 1 from jsonb_array_elements(payload->'guests') x
+    where g.name_en = trim(coalesce(x->>'name_en', ''))
+      and g.name_zh = trim(coalesce(x->>'name_zh', ''))
+  );
+  get diagnostics v_deleted = row_count;
+  return jsonb_build_object('imported', v_imported, 'new', v_new, 'deleted', v_deleted);
 ```
 
-- [ ] **Step 2: smoke.sql** — inside the transaction, existing DO-block style: delete an unseated seeded guest (Tiger Chen) and assert row count drops; attempt delete on a seated guest and assert exactly 'guest is seated' raised; non-admin sub attempt asserts 'not authorized'. (All inside the rollback — seed unharmed.)
+(declare `v_deleted int`; drop the old `v_unseated` select. Re-issue the revoke/grant lines for the function as in 0003.)
 
-- [ ] **Step 3: api.ts**
+- [ ] **Step 2: smoke.sql** — update the import block: after import with a 2-guest payload, assert a seeded guest ABSENT from the payload no longer exists (`select count(*) ... name_en='Kevin Hu'` = 0), assert `(r->>'deleted')::int` ≥ 1, keep the label/moved asserts. All within the rollback.
 
-```ts
-export const deleteGuest = async (guestId: string): Promise<void> => {
-  unwrap(await supabase.rpc('delete_guest', { p_guest_id: guestId }));
-};
-```
+- [ ] **Step 3: api.ts** — return type `Promise<{ imported: number; new: number; deleted: number }>`.
 
-- [ ] **Step 4: sidebar UI** in `src/host/main.ts` refresh(): each unseated card becomes a row: the existing name button plus a sibling × button (class `delete-btn`). × click #1: textContent → 'Delete?', class +`armed`, setTimeout 3000 to disarm (restore '×'); click #2 while armed: `deleteGuest(g.id)` → toast on failure → `refresh()`. All strings textContent. CSS: `.unseated-row { display:flex; gap:4px; } .unseated-row .card { flex:1; } .delete-btn { border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:10px; padding:0 10px; } .delete-btn.armed { background:var(--highlight); color:#fff; border-color:var(--highlight); }`
+- [ ] **Step 4: import UI** — preview line becomes `${guests.length} guests across 12 tables · ${newCount} new · table names updated from row 1` plus, when `willDelete > 0` (DB guests whose identity is absent from the sheet — the old willUnseat computation, renamed): append a SECOND line in a `.preview-warn` element: `⚠ ${willDelete} will be DELETED (absent from sheet)`. Toast: `Imported ${r.imported} seats (${r.new} new, ${r.deleted} deleted)`. CSS: `.preview-warn { color: var(--highlight); font-weight: 600; }`
 
-- [ ] **Step 5: e2e** (after the matrix-import + bridge block, host page): paste the standard MATRIX plus an extra guest `Deleteme Test` seated at table 5 seat 2, import; re-paste the ORIGINAL MATRIX (without them), import → Deleteme becomes unseated; find their row in the sidebar, tap × then 'Delete?', wait for the row to disappear; assert sidebar no longer contains 'Deleteme Test'. End state = same as before the block (rerun-stable). Bump the header count.
+- [ ] **Step 5: e2e rework** (order of blocks unchanged; internal choreography):
+  a. HOST section start (right after `host: occupied chairs` check): unseat seat 1-4 via the map (tap → #unseat), wait for sidebar count +1 — replaces the reliance on seed-provided unseated guests (which the import block now deletes). The existing 'assign to empty seat works' check picks THIS guest (James Dang) and assigns to 5-1; the move/swap checks unchanged; the final 'unseat restores state' becomes: move 5-1 → 1-4 (restores James), assert unseated count back to baseline.
+  b. MATRIX block: assert toast matches `/Imported 8 seats \(\d+ new, \d+ deleted\)/`; first run deletes José García + Tiger Chen (absent from MATRIX) — reruns delete 0; both satisfy the regex.
+  c. Bridge + rename + pinch checks unchanged. Update the header comment count if the check count changes (target: same 28 unless a is split — keep 28 by folding the unseat-first step into existing checks' arrange phases).
+  Run `npm run e2e` twice — both 28/28 — AND once more after a fresh `supabase db reset` (+ auth recreation) to prove both cold and warm paths.
 
-- [ ] **Step 6:** runbook §4: add one line — stray unseated entries (sheet noise) are removed with the sidebar ×; delete in-app AND fix the sheet or the next import resurrects them.
+- [ ] **Step 6: runbook §4** — rewrite the import paragraph: full override, sheet = complete guest list, absentees deleted (shown in preview as a warning count), partial-paste hazard, day-of removal flow (unseat on map → remove from sheet → re-import).
 
-- [ ] **Step 7: Verify** — vitest + check green; SMOKE OK; e2e (now 29) twice. **Commit** "feat: delete unseated guests (admin RPC + sidebar confirm)".
+- [ ] **Step 7: Verify + commit** — vitest + check green; SMOKE OK; e2e per Step 5. Commit "feat: import override — guests absent from the sheet are deleted".
 
 ---
 
