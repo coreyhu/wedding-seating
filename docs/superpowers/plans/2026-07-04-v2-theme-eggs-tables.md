@@ -1406,6 +1406,102 @@ check('amenities: zh keyword search finds restroom', true);
 
 ---
 
+### Task 11: Mobile pinch-to-zoom + touch pan
+
+**Files:**
+- Modify: `src/shared/floorplan.ts` (gesture layer), `src/shared/floorplan.test.ts` (1 safety test), `scripts/e2e.mjs` (+1 CDP pinch check), `docs/deploy-runbook.md` (+ "Testing from a phone" note)
+
+**Interfaces:**
+- Consumes: the `pz` instance inside `mountFloorplan`. Produces: no API changes — gestures are internal wiring added right after `pz` construction.
+
+- [ ] **Step 1: Safety test** (append to floorplan.test.ts — gestures must be inert without panZoom):
+
+```ts
+it('mounting without panZoom attaches no gesture handlers that throw on pointer events', () => {
+  const fp = mount();
+  expect(() => {
+    fp.svg.dispatchEvent(new Event('pointerdown'));
+    fp.svg.dispatchEvent(new Event('pointermove'));
+    fp.svg.dispatchEvent(new Event('pointerup'));
+  }).not.toThrow();
+});
+```
+
+- [ ] **Step 2: Implement the gesture layer** in `mountFloorplan`, inside the existing `if (pz)` block (alongside the resize handler):
+
+```ts
+    // svg-pan-zoom has no touch support; hand-rolled pinch/pan for non-mouse pointers.
+    const touches = new Map<number, { x: number; y: number }>();
+    let pinchDist = 0;
+    let gestureActive = false;
+    const mid = () => {
+      const [a, b] = [...touches.values()];
+      return { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+    };
+    const dist = () => {
+      const [a, b] = [...touches.values()];
+      return Math.hypot(a!.x - b!.x, a!.y - b!.y);
+    };
+    svg.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse') return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) { pinchDist = dist(); gestureActive = true; }
+    });
+    svg.addEventListener('pointermove', e => {
+      if (e.pointerType === 'mouse' || !touches.has(e.pointerId)) return;
+      const prev = touches.get(e.pointerId)!;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 1) {
+        const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+        if (gestureActive || Math.hypot(dx, dy) > 3) {
+          gestureActive = true;
+          e.preventDefault();
+          pz!.panBy({ x: dx, y: dy });
+        }
+      } else if (touches.size === 2) {
+        e.preventDefault();
+        const d = dist();
+        if (pinchDist > 0 && d > 0) {
+          const rect = svg.getBoundingClientRect();
+          const m = mid();
+          pz!.zoomAtPoint(pz!.getZoom() * (d / pinchDist),
+            { x: m.x - rect.left, y: m.y - rect.top });
+        }
+        pinchDist = d;
+      }
+    });
+    const endTouch = (e: PointerEvent) => {
+      touches.delete(e.pointerId);
+      if (touches.size < 2) pinchDist = 0;
+      if (touches.size === 0) gestureActive = false;
+    };
+    svg.addEventListener('pointerup', endTouch);
+    svg.addEventListener('pointercancel', endTouch);
+```
+
+Note: no `preventDefault` on pointerdown and none on sub-threshold single-pointer moves — taps must keep firing `click` for `onTap` delegation. `panBy` composes with the double-tap... svg-pan-zoom's `dblClickZoomEnabled` is already false. Disable svg-pan-zoom's own `mouseWheelZoomEnabled`? NO — leave desktop behavior untouched.
+
+- [ ] **Step 3: e2e** (append after the layout check; chromium CDP):
+
+```js
+const beforeMatrix = await page.evaluate(() =>
+  document.querySelector('.svg-pan-zoom_viewport')?.getAttribute('transform') ?? '');
+const cdp = await page.context().newCDPSession(page);
+await cdp.send('Input.synthesizePinchGesture', { x: vp.width / 2, y: vp.height / 2, scaleFactor: 2, relativeSpeed: 300 });
+await page.waitForTimeout(400);
+const afterMatrix = await page.evaluate(() =>
+  document.querySelector('.svg-pan-zoom_viewport')?.getAttribute('transform') ?? '');
+check('mobile: pinch zooms the map', beforeMatrix !== '' && beforeMatrix !== afterMatrix, `${beforeMatrix} -> ${afterMatrix}`);
+```
+
+(If `Input.synthesizePinchGesture` proves unavailable/flaky in headless-shell, fall back to dispatching two synthetic PointerEvents sequences via page.evaluate and assert the same transform change — document which path was used.)
+
+- [ ] **Step 4: Runbook** — new short section "Testing from a phone (dev)": `npx vite --host` + set `.env.local`'s `VITE_SUPABASE_URL` to the Mac's LAN IP (`ipconfig getifaddr en0`) because `127.0.0.1` on the phone is the phone; both devices on the same Wi-Fi; `npm run qr -- http://<lan-ip>:5173` for easy opening.
+
+- [ ] **Step 5: Verify** — vitest + check green; e2e 26/26 twice; ALSO a real-ish manual probe: playwright `hasTouch: true` context, dispatch touch drag, assert pan transform changed. **Step 6: Commit** — `git add src scripts docs && git commit -m "feat: mobile pinch-to-zoom and touch pan"`
+
+---
+
 ## Verification (whole-plan)
 
 1. `npx vitest run` — all unit suites green (v1 36 − csv + new i18n/couple/effects/floorplan/landmark/matrix/pinyin tests).

@@ -131,6 +131,18 @@ Guests can find venue features, not just seats. Guest page only.
 - **Map labels**: amenity names render on the map at landmark coordinates in the current locale — new `Floorplan.setLandmarkLabels(labels: Record<string, string>)` mirroring `setTableLabels` (class `.landmark-label`, smaller/muted vs table labels); re-rendered on locale change. Guest page only.
 - **Non-goals**: no petals for amenities (reserved for seat finds); no host-side amenity editing (curated in code); no wayfinding.
 
+## 9. Mobile touch gestures (user feedback 2026-07-04, phone testing)
+
+svg-pan-zoom ships no touch support — desktop scroll/drag works, phones cannot pinch or pan. Fix with a hand-rolled Pointer Events gesture layer (no new dependency), active only for non-mouse pointers:
+
+- One touch pointer down + move → `panBy` (drag-to-pan).
+- Two pointers → pinch: zoom about the pinch midpoint (`zoomAtPoint` with the distance ratio) while tracking midpoint drift for combined pinch+pan.
+- Taps stay taps: `preventDefault` only fires on gesture MOVEMENT past a small threshold, never on pointerdown, so click delegation (seat taps, host editor) is untouched.
+- Requires the existing `touch-action: none` on `.floorplan` (already present since v1).
+- Applies to both pages (shared `mountFloorplan`); host gains pinch too.
+- E2e: a CDP-synthesized pinch on the guest map must change the viewport transform scale.
+- Runbook note: phone-testing the DEV server needs `vite --host` + `.env.local`'s Supabase URL set to the Mac's LAN IP (127.0.0.1 on a phone is the phone) — one paragraph under a new "Testing from a phone" heading.
+
 ## Testing
 
 - Unit: `matchesCouple` (EN substring/length rules, ZH rules, no-placeholder assert), landmark extraction in `svg-transform.test.ts`, label-fallback rendering helper.
