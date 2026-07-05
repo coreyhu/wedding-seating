@@ -25,10 +25,12 @@ await page.waitForSelector('.card', { timeout: 5000 });
 const cards = await page.locator('.card').count();
 check('guest: "eric" shows 2 cards', cards === 2, `got ${cards}`);
 
-await page.locator('.card').first().click();
+// target Eric Dang explicitly: 'eric' yields two equal-rank prefix matches whose
+// relative order is server-arbitrary, so .first() is nondeterministic by design.
+await page.locator('.card', { hasText: 'Eric Dang' }).click();
 await page.waitForSelector('#banner:not([hidden])', { timeout: 3000 });
 const bannerText = await page.textContent('#banner');
-check('guest: banner shows bilingual table', /Table 1|1号桌/.test(bannerText), bannerText.trim().slice(0, 60));
+check('guest: banner shows bilingual table', /Eric Dang/.test(bannerText) && /Table 1|1号桌/.test(bannerText), bannerText.trim().slice(0, 60));
 const highlighted = await page.locator('svg .highlight').count();
 check('guest: exactly one chair highlighted', highlighted === 1, `got ${highlighted}`);
 
