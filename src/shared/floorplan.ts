@@ -108,6 +108,24 @@ export function mountFloorplan(container: HTMLElement,
     svg.addEventListener('touchmove', blockNativeMultiTouch, { passive: false });
     // Older-iOS proprietary gesture events: stop Safari's page zoom outright.
     svg.addEventListener('gesturestart' as keyof SVGSVGElementEventMap, (e: Event) => e.preventDefault());
+
+    // Diagnostic HUD for real-device gesture debugging: open the page with
+    // ?fpdebug to see exactly which events the browser delivers. Zero cost
+    // and invisible without the flag.
+    if (location.search.includes('fpdebug')) {
+      const hud = document.createElement('div');
+      hud.style.cssText = 'position:fixed;bottom:4px;left:4px;z-index:999;background:rgba(0,0,0,.78);color:#7CFC00;font:12px/1.5 monospace;padding:6px 8px;border-radius:6px;pointer-events:none;white-space:pre';
+      document.body.append(hud);
+      const n: Record<string, number> = { down: 0, move: 0, up: 0, cancel: 0, tstart: 0, tmove: 0, gstart: 0 };
+      const paint = () => {
+        hud.textContent = `pointer down:${n.down} move:${n.move} up:${n.up}\nCANCEL:${n.cancel}  touches.size:${touches.size}\ntouchstart:${n.tstart} touchmove:${n.tmove} gesture:${n.gstart}\nzoom:${pz!.getZoom().toFixed(2)}`;
+      };
+      const count = (ev: string, k: string) => svg.addEventListener(ev as keyof SVGSVGElementEventMap, () => { n[k] = (n[k] ?? 0) + 1; paint(); });
+      count('pointerdown', 'down'); count('pointermove', 'move'); count('pointerup', 'up');
+      count('pointercancel', 'cancel'); count('touchstart', 'tstart'); count('touchmove', 'tmove');
+      count('gesturestart', 'gstart');
+      paint();
+    }
   }
 
   const seatEl = (key: SeatKey) => svg.querySelector<SVGGraphicsElement>(`#seat-${escapeId(key)}`)
