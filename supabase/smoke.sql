@@ -16,6 +16,16 @@ begin
 end $$;
 
 do $$
+declare cnt int; tiger uuid;
+begin
+  cnt := (select count(*) from table_guests((select id from guests where name_en = 'Carol Zhao')));
+  assert cnt = 4, 'table_guests returns all 4 seated at table 1';
+  select id into tiger from guests where name_en = 'Tiger Chen';  -- unseated in seed
+  cnt := (select count(*) from table_guests(tiger));
+  assert cnt = 0, 'table_guests returns none for an unseated guest';
+end $$;
+
+do $$
 declare a uuid; b uuid;
 begin
   select id into a from guests where name_en = 'Carol Zhao';
@@ -93,6 +103,10 @@ begin
     'anon can execute search_guests';
   assert has_function_privilege('authenticated', 'search_guests(text)', 'execute'),
     'authenticated can execute search_guests';
+  assert has_function_privilege('anon', 'table_guests(uuid)', 'execute'),
+    'anon can execute table_guests';
+  assert has_function_privilege('authenticated', 'table_guests(uuid)', 'execute'),
+    'authenticated can execute table_guests';
   assert not has_function_privilege('anon', 'assign_seat(uuid,int,int)', 'execute'),
     'anon cannot execute assign_seat';
   assert not has_function_privilege('anon', 'unseat(uuid)', 'execute'),
