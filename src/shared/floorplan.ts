@@ -84,9 +84,13 @@ export function mountFloorplan(container: HTMLElement,
           try {
             const rect = svg.getBoundingClientRect();
             const m = mid();
-            pz!.zoomAtPoint(pz!.getZoom() * (d / pinchDist),
-              { x: m.x - rect.left, y: m.y - rect.top });
-            debugNote?.(`pinch ok r=${(d / pinchDist).toFixed(3)} z=${pz!.getZoom().toFixed(2)}`);
+            const reqZoom = pz!.getZoom() * (d / pinchDist);
+            pz!.zoomAtPoint(reqZoom, { x: m.x - rect.left, y: m.y - rect.top });
+            if (debugNote) {
+              const a = (svg.querySelector('.svg-pan-zoom_viewport')?.getAttribute('transform') ?? '')
+                .match(/matrix\(([-\d.]+)/)?.[1] ?? '?';
+              debugNote(`req=${reqZoom.toFixed(4)} got=${pz!.getZoom().toFixed(4)} dom_a=${Number(a).toFixed(4)}`);
+            }
           } catch (err) {
             debugNote?.(`PINCH ERR: ${String(err).slice(0, 120)}`);
           }
