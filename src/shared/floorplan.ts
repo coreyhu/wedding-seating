@@ -56,21 +56,19 @@ export function mountFloorplan(container: HTMLElement,
     : null;
 
   if (pz) {
-    let nResize = 0;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => { nResize++; pz!.resize(); pz!.fit(); pz!.center(); }, 150);
+      resizeTimer = setTimeout(() => { pz!.resize(); pz!.fit(); pz!.center(); }, 150);
     });
 
-    // svg-pan-zoom has no touch support; hand-rolled pinch/pan for non-mouse pointers.
-    let debugNote: ((s: string) => void) | undefined; // set only under ?fpdebug
-    let zMin = Infinity, zMax = -Infinity;
-    let nSkips = 0;
-    const series: string[] = [];
-    const moveCounts = new Map<number, number>();
+    // svg-pan-zoom's touch handlers are halted (see options above); this layer
+    // owns all touch input. One finger pans; two fingers pinch-zoom about the
+    // midpoint AND pan with the midpoint's drift, so guests can roam and zoom
+    // in a single gesture.
     const touches = new Map<number, { x: number; y: number }>();
     let pinchDist = 0;
+    let prevMid: { x: number; y: number } | null = null;
     let gestureActive = false;
     const mid = () => {
       const [a, b] = [...touches.values()];
@@ -83,12 +81,11 @@ export function mountFloorplan(container: HTMLElement,
     svg.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse') return;
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (touches.size === 2) { pinchDist = dist(); gestureActive = true; }
+      if (touches.size === 2) { pinchDist = dist(); prevMid = mid(); gestureActive = true; }
     });
     svg.addEventListener('pointermove', e => {
       if (e.pointerType === 'mouse' || !touches.has(e.pointerId)) return;
       const prev = touches.get(e.pointerId)!;
-      if (debugNote) moveCounts.set(e.pointerId, (moveCounts.get(e.pointerId) ?? 0) + 1);
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 1) {
         const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
@@ -100,30 +97,20 @@ export function mountFloorplan(container: HTMLElement,
       } else if (touches.size === 2) {
         e.preventDefault();
         const d = dist();
+        const m = mid();
         if (pinchDist > 0 && d > 0) {
-          try {
-            const rect = svg.getBoundingClientRect();
-            const m = mid();
-            const ratio = d / pinchDist;
-            const reqZoom = pz!.getZoom() * ratio;
-            pz!.zoomAtPoint(reqZoom, { x: m.x - rect.left, y: m.y - rect.top });
-            if (debugNote) {
-              const z = pz!.getZoom();
-              zMin = Math.min(zMin, z); zMax = Math.max(zMax, z);
-              series.push(`d=${d | 0} r=${ratio.toFixed(3)} z=${z.toFixed(3)}`);
-              if (series.length > 7) series.shift();
-              debugNote(`MAX=${zMax.toFixed(3)} skips=${nSkips}\n${series.join('\n')}`);
-            }
-          } catch (err) {
-            debugNote?.(`PINCH ERR: ${String(err).slice(0, 120)}`);
-          }
-        } else if (debugNote) { nSkips++; }
+          if (prevMid) pz!.panBy({ x: m.x - prevMid.x, y: m.y - prevMid.y });
+          const rect = svg.getBoundingClientRect();
+          pz!.zoomAtPoint(pz!.getZoom() * (d / pinchDist),
+            { x: m.x - rect.left, y: m.y - rect.top });
+        }
         pinchDist = d;
+        prevMid = m;
       }
     });
     const endTouch = (e: PointerEvent) => {
       touches.delete(e.pointerId);
-      if (touches.size < 2) pinchDist = 0;
+      if (touches.size < 2) { pinchDist = 0; prevMid = null; }
       if (touches.size === 0) gestureActive = false;
     };
     svg.addEventListener('pointerup', endTouch);
@@ -150,10 +137,8 @@ export function mountFloorplan(container: HTMLElement,
       hud.style.cssText = 'position:fixed;bottom:4px;left:4px;z-index:999;background:rgba(0,0,0,.78);color:#7CFC00;font:12px/1.5 monospace;padding:6px 8px;border-radius:6px;pointer-events:none;white-space:pre';
       document.body.append(hud);
       const n: Record<string, number> = { down: 0, move: 0, up: 0, cancel: 0, tstart: 0, tmove: 0, gstart: 0 };
-      let note = '';
-      debugNote = (s: string) => { note = s; paint(); };
       const paint = () => {
-        hud.textContent = `pointer down:${n.down} move:${n.move} up:${n.up}\nCANCEL:${n.cancel}  touches.size:${touches.size}\ntouchstart:${n.tstart} touchmove:${n.tmove} gesture:${n.gstart}\nzoom:${pz!.getZoom().toFixed(2)}\n${note}`;
+        hud.textContent = `pointer down:${n.down} move:${n.move} up:${n.up}\nCANCEL:${n.cancel}  touches.size:${touches.size}\ntouchstart:${n.tstart} touchmove:${n.tmove} gesture:${n.gstart}\nzoom:${pz!.getZoom().toFixed(2)} pan:${(() => { const p = pz!.getPan(); return `${p.x | 0},${p.y | 0}`; })()}`;
       };
       const count = (ev: string, k: string) => svg.addEventListener(ev as keyof SVGSVGElementEventMap, () => { n[k] = (n[k] ?? 0) + 1; paint(); });
       count('pointerdown', 'down'); count('pointermove', 'move'); count('pointerup', 'up');

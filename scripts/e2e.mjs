@@ -1,4 +1,4 @@
-// E2E regression suite (27 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
+// E2E regression suite (28 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // NOTE: `supabase db reset` wipes auth.users — host@test.dev is NOT in seed.sql
@@ -108,13 +108,23 @@ await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{
 await page.waitForTimeout(80);
 await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 350, id: 1 }, { x: 195, y: 650, id: 2 }] });
 for (let i = 1; i <= 24; i++) {
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195, y: 350 + i * 6, id: 1 }, { x: 195, y: 650 - i * 6, id: 2 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195, y: 350 + i * 4, id: 1 }, { x: 195, y: 650 - i * 4, id: 2 }] });
   await page.waitForTimeout(16);
 }
+// two-finger roam: both fingers drift in parallel (constant distance) — the map must PAN
+const panX = () => page.evaluate(() =>
+  Number((document.querySelector('.svg-pan-zoom_viewport')?.getAttribute('transform') ?? '').match(/matrix\([^)]*?,\s*([-\d.]+),\s*[-\d.]+\)$/)?.[1] ?? '0'));
+const panBefore = await panX();
+for (let i = 1; i <= 10; i++) {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195 + i * 8, y: 350 + 24 * 4, id: 1 }, { x: 195 + i * 8, y: 650 - 24 * 4, id: 2 }] });
+  await page.waitForTimeout(16);
+}
+const panAfter = await panX();
 await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 await page.waitForTimeout(300);
 const stagAfter = Number(await vpScale());
 check('mobile: staggered-start pinch zooms (iOS regression)', stagBefore / stagAfter > 1.5, `${stagBefore.toFixed(4)} -> ${stagAfter.toFixed(4)}`);
+check('mobile: two-finger drift pans while pinched', Math.abs(panAfter - panBefore) > 20, `panX ${panBefore.toFixed(0)} -> ${panAfter.toFixed(0)}`);
 
 // ---------- AMENITIES ----------
 await page.fill('#q', '');
