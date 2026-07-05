@@ -143,6 +143,14 @@ svg-pan-zoom ships no touch support — desktop scroll/drag works, phones cannot
 - E2e: a CDP-synthesized pinch on the guest map must change the viewport transform scale.
 - Runbook note: phone-testing the DEV server needs `vite --host` + `.env.local`'s Supabase URL set to the Mac's LAN IP (127.0.0.1 on a phone is the phone) — one paragraph under a new "Testing from a phone" heading.
 
+## 10. Delete unseated guests (user-requested 2026-07-05)
+
+- Host sidebar: each unseated guest card gains a small × button. First tap arms it (button text becomes "Delete?", auto-disarms after 3s); second tap deletes via RPC and refreshes.
+- **RPC `delete_guest(p_guest_id uuid)`** (migration `0004_delete_guest.sql`): admin-gated; raises `'guest is seated'` if `table_no is not null` (unseat first — a mis-tap can never remove someone from a table); raises `'unknown guest'` if no row. Standard grants pattern.
+- Import interplay (documented in runbook §4): deletion is permanent, but a name still present in the sheet is re-created by the next import — clean the sheet AND delete in-app for stray entries.
+- Seated guests: no delete affordance shown at all.
+- Tests: smoke (delete unseated ✓, refuse seated ✓, non-admin rejected ✓); e2e: import a throwaway guest via the matrix panel, re-import without them (→ unseated), × ×, gone from sidebar — leaves state rerun-stable.
+
 ## Testing
 
 - Unit: `matchesCouple` (EN substring/length rules, ZH rules, no-placeholder assert), landmark extraction in `svg-transform.test.ts`, label-fallback rendering helper.

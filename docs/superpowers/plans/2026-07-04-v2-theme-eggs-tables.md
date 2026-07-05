@@ -1502,6 +1502,53 @@ check('mobile: pinch zooms the map', beforeMatrix !== '' && beforeMatrix !== aft
 
 ---
 
+### Task 12: Delete unseated guests
+
+**Files:**
+- Create: `supabase/migrations/0004_delete_guest.sql`
+- Modify: `supabase/smoke.sql` (+3 asserts), `src/shared/api.ts` (+deleteGuest), `src/host/main.ts` (sidebar × with arm/confirm), `src/styles.css` (.unseated-row/.delete-btn), `scripts/e2e.mjs` (+1 check), `docs/deploy-runbook.md` (§4 note)
+
+**Interfaces:**
+- Produces: SQL `delete_guest(p_guest_id uuid)`; api `deleteGuest(guestId: string): Promise<void>`.
+
+- [ ] **Step 1: Migration**
+
+```sql
+create or replace function delete_guest(p_guest_id uuid)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+declare v_table int;
+begin
+  if not is_admin() then raise exception 'not authorized'; end if;
+  select table_no into v_table from guests where id = p_guest_id;
+  if not found then raise exception 'unknown guest'; end if;
+  if v_table is not null then raise exception 'guest is seated'; end if;
+  delete from guests where id = p_guest_id;
+end $$;
+
+revoke execute on function delete_guest(uuid) from public, anon, authenticated;
+grant execute on function delete_guest(uuid) to authenticated;
+```
+
+- [ ] **Step 2: smoke.sql** — inside the transaction, existing DO-block style: delete an unseated seeded guest (Tiger Chen) and assert row count drops; attempt delete on a seated guest and assert exactly 'guest is seated' raised; non-admin sub attempt asserts 'not authorized'. (All inside the rollback — seed unharmed.)
+
+- [ ] **Step 3: api.ts**
+
+```ts
+export const deleteGuest = async (guestId: string): Promise<void> => {
+  unwrap(await supabase.rpc('delete_guest', { p_guest_id: guestId }));
+};
+```
+
+- [ ] **Step 4: sidebar UI** in `src/host/main.ts` refresh(): each unseated card becomes a row: the existing name button plus a sibling × button (class `delete-btn`). × click #1: textContent → 'Delete?', class +`armed`, setTimeout 3000 to disarm (restore '×'); click #2 while armed: `deleteGuest(g.id)` → toast on failure → `refresh()`. All strings textContent. CSS: `.unseated-row { display:flex; gap:4px; } .unseated-row .card { flex:1; } .delete-btn { border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:10px; padding:0 10px; } .delete-btn.armed { background:var(--highlight); color:#fff; border-color:var(--highlight); }`
+
+- [ ] **Step 5: e2e** (after the matrix-import + bridge block, host page): paste the standard MATRIX plus an extra guest `Deleteme Test` seated at table 5 seat 2, import; re-paste the ORIGINAL MATRIX (without them), import → Deleteme becomes unseated; find their row in the sidebar, tap × then 'Delete?', wait for the row to disappear; assert sidebar no longer contains 'Deleteme Test'. End state = same as before the block (rerun-stable). Bump the header count.
+
+- [ ] **Step 6:** runbook §4: add one line — stray unseated entries (sheet noise) are removed with the sidebar ×; delete in-app AND fix the sheet or the next import resurrects them.
+
+- [ ] **Step 7: Verify** — vitest + check green; SMOKE OK; e2e (now 29) twice. **Commit** "feat: delete unseated guests (admin RPC + sidebar confirm)".
+
+---
+
 ## Verification (whole-plan)
 
 1. `npx vitest run` — all unit suites green (v1 36 − csv + new i18n/couple/effects/floorplan/landmark/matrix/pinyin tests).
