@@ -84,7 +84,14 @@ function showAmenity(a: Amenity): void {
   results.replaceChildren();
   banner.className = 'banner';
   banner.hidden = false;
-  banner.textContent = `${a.emoji} ${a.name[getLocale()]}`;
+  const title = document.createElement('strong');
+  title.textContent = `${a.emoji} ${a.name[getLocale()]}`;
+  banner.replaceChildren(title);
+  if (a.tagline) {
+    const tag = document.createElement('small');
+    tag.textContent = a.tagline[getLocale()];
+    banner.append(document.createElement('br'), tag);
+  }
   fp.highlight(null);
   fp.zoomToLandmark(a.id);
 }

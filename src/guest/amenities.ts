@@ -5,6 +5,7 @@ export interface Amenity {
   emoji: string;
   name: { en: string; zh: string };
   keywords: { en: string[]; zh: string[] };
+  tagline?: { en: string; zh: string };
 }
 
 // Curated subset of seatmap.json landmarks worth surfacing to guests.
@@ -15,12 +16,14 @@ export const AMENITIES: Amenity[] = [
     emoji: '🍸',
     name: { en: 'Bar', zh: '酒吧' },
     keywords: { en: ['bar', 'drinks'], zh: ['酒吧', '吧台'] },
+    tagline: { en: 'Open bar all night — try our signature cocktail', zh: '全场畅饮，来尝尝我们的招牌鸡尾酒' },
   },
   {
     id: 'welcome_table',
     emoji: '💌',
     name: { en: 'Welcome Table', zh: '迎宾台' },
     keywords: { en: ['welcome table', 'welcome'], zh: ['迎宾台', '签到'] },
+    tagline: { en: 'Get your photo taken and sign the guest book', zh: '拍张合影，在留言簿上签名留言' },
   },
   {
     id: 'ceremony_seating',
@@ -33,6 +36,7 @@ export const AMENITIES: Amenity[] = [
     emoji: '🎨',
     name: { en: 'Live Artist', zh: '现场创作' },
     keywords: { en: ['live artist', 'artist'], zh: ['现场创作', '画家'] },
+    tagline: { en: 'Get painted live by our guest artist', zh: '让驻场艺术家为您现场作画' },
   },
   {
     id: 'restroom',
@@ -48,12 +52,14 @@ export const AMENITIES: Amenity[] = [
     emoji: '🎁',
     name: { en: 'Gifts', zh: '礼品台' },
     keywords: { en: ['gifts', 'gift table'], zh: ['礼品台', '礼金'] },
+    tagline: { en: 'Leave any gifts here', zh: '礼物请放在这里' },
   },
   {
     id: 'dj',
     emoji: '🎧',
     name: { en: 'DJ', zh: 'DJ台' },
     keywords: { en: ['dj', 'music'], zh: ['DJ台', '音乐'] },
+    tagline: { en: 'Taking requests all night', zh: '全程欢迎点歌' },
   },
 ];
 

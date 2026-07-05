@@ -9,6 +9,16 @@ it('every amenity id exists in the generated landmarks (SVG contract guard)', ()
 it('excludes the sweetheart table (easter egg stays secret)', () => {
   expect(AMENITIES.some(a => a.id === 'sweetheart_table')).toBe(false);
 });
+it('taglines: five amenities carry bilingual taglines, ceremony/restroom do not', () => {
+  const withTag = ['bar', 'welcome_table', 'guest_artist', 'gift_table', 'dj'];
+  for (const id of withTag) {
+    const a = AMENITIES.find(x => x.id === id)!;
+    expect(a.tagline?.en?.length).toBeGreaterThan(0);
+    expect(a.tagline?.zh?.length).toBeGreaterThan(0);
+  }
+  expect(AMENITIES.find(x => x.id === 'ceremony_seating')!.tagline).toBeUndefined();
+  expect(AMENITIES.find(x => x.id === 'restroom')!.tagline).toBeUndefined();
+});
 describe('matchAmenity', () => {
   it('matches exact names and keywords in both scripts', () => {
     expect(matchAmenity(prepareQuery('Bar'))?.id).toBe('bar');
