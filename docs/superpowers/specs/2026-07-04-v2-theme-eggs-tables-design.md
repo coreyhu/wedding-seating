@@ -121,6 +121,16 @@ Guest-side only; no schema changes; the server's `search_guests` is called with 
 - Effects (`burstPetals`, celebration) are decorative: wrapped, never throw into the search flow.
 - Guest map labels: decorative, silent skip on fetch failure (documented exception).
 
+## 8. Amenity discovery (user-requested 2026-07-04, post-v2)
+
+Guests can find venue features, not just seats. Guest page only.
+
+- **Data**: `src/guest/amenities.ts` — curated list for exactly these landmark ids (all others stay internal; `sweetheart_table` deliberately excluded to protect the easter egg): `bar` (🍸 Bar/酒吧), `welcome_table` (💌 Welcome Table/迎宾台), `ceremony_seating` (💒 Ceremony/仪式区), `guest_artist` (🎨 Live Artist/现场创作), `restroom` (🚻 Restrooms/洗手间), `gift_table` (🎁 Gifts/礼品台), `dj` (🎧 DJ/DJ台). Each entry: `{ id, emoji, name: {en, zh}, keywords: {en: string[], zh: string[]} }` (keywords cover synonyms: 'bathroom'/'toilet'/'厕所'/'卫生间' → restroom, etc.). A unit test asserts every amenity id exists in the generated `seatmap.json` landmarks — a re-export that drops one fails the build.
+- **Chips**: a horizontally scrollable chip row in the overlay directly under the search bar — `{emoji} {name[locale]}` per amenity; tapping zooms (`zoomToLandmark`) and shows the amenity banner (`banner` element, normal 'banner' class: `{emoji} {name[locale]}`). Chips re-render on locale change and must not shrink the results area (row ~40px, horizontal scroll, pointer-events auto).
+- **Search**: after the couple check, before the RPC — if the prepared query EXACTLY equals an amenity's normalized name or any keyword (en: normalizeEn; zh: whitespace-stripped), render that amenity (banner + zoom), skip the RPC. Exact-match only so guest names can never be hijacked ('bar' → amenity; 'barb…' → guest search).
+- **Map labels**: amenity names render on the map at landmark coordinates in the current locale — new `Floorplan.setLandmarkLabels(labels: Record<string, string>)` mirroring `setTableLabels` (class `.landmark-label`, smaller/muted vs table labels); re-rendered on locale change. Guest page only.
+- **Non-goals**: no petals for amenities (reserved for seat finds); no host-side amenity editing (curated in code); no wayfinding.
+
 ## Testing
 
 - Unit: `matchesCouple` (EN substring/length rules, ZH rules, no-placeholder assert), landmark extraction in `svg-transform.test.ts`, label-fallback rendering helper.

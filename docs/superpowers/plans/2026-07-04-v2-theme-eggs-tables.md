@@ -1318,6 +1318,94 @@ check('layout: map fills the viewport', mapBox.width >= vp.width - 2 && mapBox.h
 
 ---
 
+### Task 10: Amenity discovery (chips + search + map labels)
+
+**Files:**
+- Create: `src/guest/amenities.ts`, `src/guest/amenities.test.ts`
+- Modify: `src/shared/floorplan.ts` (+setLandmarkLabels), `src/shared/floorplan.test.ts` (1 test), `src/guest/main.ts` (chips render + search hook), `index.html` (chip row container), `src/styles.css` (.chips/.chip/.landmark-label), `scripts/e2e.mjs` (+2 checks)
+
+**Interfaces:**
+- Consumes: `zoomToLandmark`, `getLocale`/`onLocaleChange`, seatmap landmarks, `normalizeEn`, `PreparedQuery`.
+- Produces:
+
+```ts
+// amenities.ts
+export interface Amenity { id: string; emoji: string; name: { en: string; zh: string }; keywords: { en: string[]; zh: string[] } }
+export const AMENITIES: Amenity[]; // exactly: bar, welcome_table, ceremony_seating, guest_artist, restroom, gift_table, dj
+export function matchAmenity(p: PreparedQuery): Amenity | null; // EXACT normalized-name/keyword equality only
+```
+
+`Floorplan.setLandmarkLabels(labels: Record<string, string>): void` — same replace-on-recall contract as setTableLabels, class `landmark-label`, text at landmark cx/cy.
+
+- [ ] **Step 1: Failing tests.** `src/guest/amenities.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { AMENITIES, matchAmenity } from './amenities';
+import { prepareQuery } from '../logic/search';
+import seatmap from '../generated/seatmap.json';
+
+it('every amenity id exists in the generated landmarks (SVG contract guard)', () => {
+  for (const a of AMENITIES) expect(seatmap.landmarks).toHaveProperty(a.id);
+});
+it('excludes the sweetheart table (easter egg stays secret)', () => {
+  expect(AMENITIES.some(a => a.id === 'sweetheart_table')).toBe(false);
+});
+describe('matchAmenity', () => {
+  it('matches exact names and keywords in both scripts', () => {
+    expect(matchAmenity(prepareQuery('Bar'))?.id).toBe('bar');
+    expect(matchAmenity(prepareQuery('bathroom'))?.id).toBe('restroom');
+    expect(matchAmenity(prepareQuery('洗手间'))?.id).toBe('restroom');
+    expect(matchAmenity(prepareQuery('厕所'))?.id).toBe('restroom');
+  });
+  it('never hijacks guest names (exact only, too-short never)', () => {
+    expect(matchAmenity(prepareQuery('barb'))).toBeNull();
+    expect(matchAmenity(prepareQuery('ba'))).toBeNull();
+    expect(matchAmenity({ kind: 'too-short' })).toBeNull();
+  });
+});
+```
+
+Floorplan test (append; the test seatMap already has `landmarks: { sweetheart_table: … }`):
+
+```ts
+it('setLandmarkLabels draws at landmark coords and replaces on re-call', () => {
+  const fp = mount();
+  fp.setLandmarkLabels({ sweetheart_table: 'Bar' });
+  fp.setLandmarkLabels({ sweetheart_table: '酒吧' });
+  const els = container.querySelectorAll('.landmark-label');
+  expect(els).toHaveLength(1);
+  expect(els[0]!.textContent).toBe('酒吧');
+});
+```
+
+- [ ] **Step 2: RED**, then implement `amenities.ts` (ids/emoji/names per spec §8; keywords: bar → ['bar','drinks','酒吧','吧台'], welcome_table → ['welcome table','welcome','迎宾台','签到'], ceremony_seating → ['ceremony','仪式','仪式区','典礼'], guest_artist → ['live artist','artist','现场创作','画家'], restroom → ['restroom','restrooms','bathroom','toilet','洗手间','厕所','卫生间'], gift_table → ['gifts','gift table','礼品台','礼金'], dj → ['dj','music','DJ台','音乐']; `matchAmenity`: too-short → null; en: q === normalizeEn(name.en) or any normalizeEn(kw); zh: q === stripped name.zh or any stripped kw). Implement `setLandmarkLabels` mirroring setTableLabels with class `landmark-label`.
+
+- [ ] **Step 3: Wire guest page.** `index.html`: `<div id="chips" class="chips"></div>` between `.searchbar` and `#banner` inside `.overlay`. `main.ts`: `renderChips()` — buttons `{emoji} {name[locale]}`, class `chip`, onclick → `showAmenity(a)`. `showAmenity(a)`: null lastShown/lastMatches, clear results, `banner.className='banner'`, show `${a.emoji} ${a.name[getLocale()]}` via textContent, `fp.highlight(null)`, `fp.zoomToLandmark(a.id)` — NO petals. Search hook in the debounce handler AFTER the couple check: `const am = matchAmenity(p); if (am) { showAmenity(am); return; }`. `renderLandmarkLabels()`: `fp.setLandmarkLabels(Object.fromEntries(AMENITIES.map(a => [a.id, a.name[getLocale()]])))` at startup and in onLocaleChange (which also re-runs renderChips). CSS:
+
+```css
+.chips { display: flex; gap: 6px; overflow-x: auto; pointer-events: auto; padding: 2px; scrollbar-width: none; }
+.chip { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; border-radius: 999px;
+  padding: 7px 12px; font-size: 14px; color: var(--accent-deep); box-shadow: var(--shadow); cursor: pointer; }
+.landmark-label { font-size: 10px; text-anchor: middle; fill: var(--gold); pointer-events: none; }
+```
+
+- [ ] **Step 4: e2e** (append after the LOCALIZATION block):
+
+```js
+await page.fill('#q', '');
+await page.locator('.chip', { hasText: 'Restrooms' }).click();
+await page.waitForSelector('#banner:not([hidden])');
+check('amenities: chip zooms and banners', /🚻/.test(await page.textContent('#banner')));
+await page.fill('#q', '洗手间');
+await page.waitForFunction(() => !document.querySelector('#banner').hidden && document.querySelector('#banner').textContent.includes('🚻'), null, { timeout: 4000 });
+check('amenities: zh keyword search finds restroom', true);
+```
+
+- [ ] **Step 5: Verify** — vitest + check green; e2e 25/25 TWICE; screenshot 390px (chips visible, results not crowded). **Step 6: Commit** — `git add src index.html scripts/e2e.mjs && git commit -m "feat: amenity discovery — chips, exact-match search, landmark labels"`
+
+---
+
 ## Verification (whole-plan)
 
 1. `npx vitest run` — all unit suites green (v1 36 − csv + new i18n/couple/effects/floorplan/landmark/matrix/pinyin tests).
