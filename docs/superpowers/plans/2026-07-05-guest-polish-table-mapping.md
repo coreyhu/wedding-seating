@@ -863,7 +863,7 @@ Run: `npm run e2e`
 Expected: passes (guest search, amenity zoom, host import all still work). If the e2e harness needs a running dev server / Supabase, follow `docs/deploy-runbook.md`.
 
 - [ ] **Step 3: Manual guest-flow check** (use the `/run` skill or `npm run dev`):
-  - Tap an activity chip (e.g. Bar) → banner shows name + tagline; toggle 中文 → tagline localizes.
+  - Tap an activity chip (e.g. Bar) → banner shows name + tagline in the current locale. NOTE (pre-existing behavior, confirmed by final review): an *already-open* amenity banner does NOT re-localize on the language toggle — `showAmenity` sets `lastShown=null`, so `onLocaleChange` doesn't re-render it (the amenity *name* never re-localized on toggle either; the tagline inherits this). To see the tagline in the other language, re-tap the chip after toggling. Optional follow-up: track `lastAmenity` + add a `resurface` flag to `showAmenity` (to skip the re-zoom) so it re-localizes like `showGuest` does.
   - Search a nonexistent name → empty-state card ("Ask our planner") reads as a floating card, not blended into the map.
   - Search a seated guest → banner shows seat AND an "At your table" list with your name marked; toggle language → list re-renders (no refetch flicker); the footer credit shows with a colored heart and doesn't block map panning.
   - (At-your-table shows real data only after migration `0005` is applied — see deploy note.)
