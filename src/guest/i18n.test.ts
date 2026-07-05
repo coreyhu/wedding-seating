@@ -55,3 +55,8 @@ it('survives a localStorage that throws (cookie-blocked webviews): falls back to
   expect(cb).toHaveBeenCalled();
   vi.unstubAllGlobals();
 });
+it('empty-state copy points guests to the planner (both locales)', () => {
+  expect(t('emptyState')).toBe("Can't find your name? Ask our planner.");
+  setLocale('zh');
+  expect(t('emptyState')).toBe('找不到您的名字？请咨询我们的策划师。');
+});

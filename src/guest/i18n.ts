@@ -3,7 +3,7 @@ export type Locale = 'en' | 'zh';
 const STRINGS = {
   title: { en: 'Find your seat', zh: '查找您的座位' },
   placeholder: { en: 'Your name…', zh: '请输入您的姓名…' },
-  emptyState: { en: "Can't find your name? Ask at the welcome table.", zh: '找不到您的名字？请到迎宾台咨询。' },
+  emptyState: { en: "Can't find your name? Ask our planner.", zh: '找不到您的名字？请咨询我们的策划师。' },
   noSeat: { en: 'no seat assigned yet', zh: '尚未安排座位' },
   connectionTrouble: { en: 'Connection trouble', zh: '网络异常' },
   retry: { en: 'Retry', zh: '重试' },
