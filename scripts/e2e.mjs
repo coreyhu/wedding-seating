@@ -1,4 +1,4 @@
-// E2E regression suite (26 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
+// E2E regression suite (27 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // NOTE: `supabase db reset` wipes auth.users — host@test.dev is NOT in seed.sql
@@ -93,6 +93,28 @@ await page.waitForTimeout(400);
 const afterMatrix = await page.evaluate(() =>
   document.querySelector('.svg-pan-zoom_viewport')?.getAttribute('transform') ?? '');
 check('mobile: pinch zooms the map', beforeMatrix !== '' && beforeMatrix !== afterMatrix, `${beforeMatrix} -> ${afterMatrix}`);
+
+// Staggered-start pinch — the iOS-reproducing scenario: finger 1 lands alone
+// (arming svg-pan-zoom's internal touch-pan state, which we halt via
+// customEventsHandler), finger 2 lands 80ms later. Regression net for the
+// "pinch does nothing on iPhone" bug (library touchmove restoring its
+// touchstart CTM snapshot over our pinch zoom).
+const vpScale = () => page.evaluate(() =>
+  (document.querySelector('.svg-pan-zoom_viewport')?.getAttribute('transform') ?? '').match(/matrix\(([\d.]+)/)?.[1] ?? '0');
+// (The prior check leaves the map at max zoom, so this one pinches IN — same
+// staggered-start code path, guaranteed headroom.)
+const stagBefore = Number(await vpScale());
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 350, id: 1 }] });
+await page.waitForTimeout(80);
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 350, id: 1 }, { x: 195, y: 650, id: 2 }] });
+for (let i = 1; i <= 24; i++) {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195, y: 350 + i * 6, id: 1 }, { x: 195, y: 650 - i * 6, id: 2 }] });
+  await page.waitForTimeout(16);
+}
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+await page.waitForTimeout(300);
+const stagAfter = Number(await vpScale());
+check('mobile: staggered-start pinch zooms (iOS regression)', stagBefore / stagAfter > 1.5, `${stagBefore.toFixed(4)} -> ${stagAfter.toFixed(4)}`);
 
 // ---------- AMENITIES ----------
 await page.fill('#q', '');

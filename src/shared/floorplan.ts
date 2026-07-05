@@ -38,7 +38,21 @@ export function mountFloorplan(container: HTMLElement,
   svg.classList.add('floorplan');
 
   const pz = opts.panZoom !== false
-    ? svgPanZoom(svg, { minZoom: 0.8, maxZoom: 12, zoomScaleSensitivity: 0.35, dblClickZoomEnabled: false })
+    ? svgPanZoom(svg, {
+        minZoom: 0.8, maxZoom: 12, zoomScaleSensitivity: 0.35, dblClickZoomEnabled: false,
+        // svg-pan-zoom binds its OWN touch handlers, and its pan logic rebuilds
+        // the CTM from a touchstart-time snapshot on every touchmove
+        // (handleMouseMove → firstEventCTM.translate) — stomping any zoom our
+        // pinch layer applies mid-gesture (the iOS "pinch does nothing" bug;
+        // reproduced in chromium with staggered touch starts). Halt ALL of the
+        // library's touch listeners: touch is owned by our gesture layer below,
+        // mouse/wheel stay with the library for desktop.
+        customEventsHandler: {
+          haltEventListeners: ['touchstart', 'touchend', 'touchmove', 'touchleave', 'touchcancel'],
+          init: () => {},
+          destroy: () => {},
+        },
+      })
     : null;
 
   if (pz) {
