@@ -342,13 +342,15 @@ git commit -m "feat: table_guests RPC for At-your-table + smoke assertions (Part
 - Modify: `src/shared/types.ts` (`Tablemate`)
 - Modify: `src/shared/api.ts` (`tableGuests`)
 - Modify: `src/guest/i18n.ts` (`atYourTable`, `you`)
-- Modify: `src/guest/main.ts` (`displayName` generalized, `showGuest`, `renderTablemates`, `loadTablemates`, module var)
+- Create: `src/guest/tablemates.ts` (pure `tablemateRows` helper)
+- Create: `src/guest/tablemates.test.ts`
+- Modify: `src/guest/main.ts` (`displayName` generalized, `showGuest`, `renderTablemates`, `loadTablemates`, generation counter + cache)
 - Modify: `src/styles.css` (`.tablemates`)
-- Test: `src/guest/i18n.test.ts`
+- Test: `src/guest/i18n.test.ts`, `src/guest/tablemates.test.ts`
 
 **Interfaces:**
 - Consumes: RPC `table_guests` (Task 4); `GuestMatch`, `seatKey`, `displayName`, `t`.
-- Produces: `Tablemate`; `tableGuests(guestId): Promise<Tablemate[]>`.
+- Produces: `Tablemate`; `tableGuests(guestId): Promise<Tablemate[]>`; `tablemateRows(rows: Tablemate[], selfId: string): TablemateRow[]` where `TablemateRow = { name_en: string; name_zh: string; isSelf: boolean }` (returns `[]` when the guest is alone).
 
 - [ ] **Step 1: Write the failing test** (i18n keys) — append to `src/guest/i18n.test.ts`:
 
@@ -379,6 +381,51 @@ Expected: FAIL — keys not defined.
 Run: `npm test -- i18n`
 Expected: PASS
 
+- [ ] **Step 4a: Write the failing test for the pure helper** — create `src/guest/tablemates.test.ts` (this is the branchy logic — self-marking, solo-skip — that has no DOM harness, so unit-test it purely):
+
+```ts
+import { expect, it } from 'vitest';
+import { tablemateRows } from './tablemates';
+
+const tm = (id: string, name_en: string) => ({ id, name_en, name_zh: '', seat_no: 1 });
+
+it('includes everyone in the given (seat) order and marks self', () => {
+  const rows = tablemateRows([tm('a', 'Amy'), tm('me', 'Me'), tm('b', 'Ben')], 'me');
+  expect(rows.map(r => [r.name_en, r.isSelf])).toEqual([['Amy', false], ['Me', true], ['Ben', false]]);
+});
+it('returns [] when the guest is alone at the table (nobody else to show)', () => {
+  expect(tablemateRows([tm('me', 'Me')], 'me')).toEqual([]);
+});
+it('still shows others if self is somehow absent from the rows (defensive)', () => {
+  expect(tablemateRows([tm('a', 'Amy')], 'me')).toHaveLength(1);
+});
+```
+
+- [ ] **Step 4b: Run test to verify it fails**
+
+Run: `npm test -- tablemates`
+Expected: FAIL — `./tablemates` module not found.
+
+- [ ] **Step 4c: Implement the pure helper** — create `src/guest/tablemates.ts`:
+
+```ts
+import type { Tablemate } from '../shared/types';
+
+export interface TablemateRow { name_en: string; name_zh: string; isSelf: boolean; }
+
+// Display rows for "At your table", preserving the RPC's seat order. Returns []
+// when there is nobody else at the table (the section is then skipped).
+export function tablemateRows(rows: Tablemate[], selfId: string): TablemateRow[] {
+  if (rows.filter(r => r.id !== selfId).length === 0) return [];
+  return rows.map(r => ({ name_en: r.name_en, name_zh: r.name_zh, isSelf: r.id === selfId }));
+}
+```
+
+- [ ] **Step 4d: Run test to verify it passes**
+
+Run: `npm test -- tablemates`
+Expected: PASS
+
 - [ ] **Step 5: Add the `Tablemate` type** — in `src/shared/types.ts`:
 
 ```ts
@@ -400,53 +447,57 @@ Generalize `displayName` so it also accepts a `Tablemate`:
 const displayName = (g: { name_en: string; name_zh: string }) => [g.name_en, g.name_zh].filter(Boolean).join(' · ');
 ```
 
-Extend the two existing import lines (do NOT add new import lines — that would duplicate the module specifiers). Change line 2 and line 6 of `src/guest/main.ts`:
+Extend the existing import lines and add the helper import (do NOT duplicate the `../shared/api` or `../shared/types` specifiers). Change lines 2 and 6, and add one new import for the pure helper:
 
 ```ts
 // was: import { searchGuests, listTables } from '../shared/api';
 import { searchGuests, listTables, tableGuests } from '../shared/api';
 // was: import { seatKey, type GuestMatch, type TableInfo } from '../shared/types';
 import { seatKey, type GuestMatch, type TableInfo, type Tablemate } from '../shared/types';
+// new import line:
+import { tablemateRows } from './tablemates';
 ```
 
-Add a module-level cache near the other `let` declarations (after `let lastShown`):
+Add a module-level cache **and a generation counter** near the other `let` declarations (after `let lastShown`). The counter — the same pattern as the search input's `token` — is what prevents a double-render when the SAME guest object is shown twice (e.g. a double-tapped result card): an identity check (`lastShown !== g`) would let both in-flight fetches append the list:
 
 ```ts
 let lastTablemates: Tablemate[] | null = null;
+let tablematesGen = 0;
 ```
 
-Add the two helpers:
+Add the two helpers. `renderTablemates` delegates the self-marking / solo-skip decision to the pure, tested `tablemateRows`:
 
 ```ts
-function renderTablemates(self: GuestMatch, rows: Tablemate[]): void {
-  if (rows.filter(r => r.id !== self.id).length === 0) return; // solo → skip
+function renderTablemates(rows: Tablemate[], selfId: string): void {
+  const list = tablemateRows(rows, selfId);
+  if (list.length === 0) return; // solo at table → skip the section
   const section = document.createElement('div');
   section.className = 'tablemates';
   const head = document.createElement('small');
   head.className = 'tablemates-head';
   head.textContent = t('atYourTable');
   const ul = document.createElement('ul');
-  for (const r of rows) {
-    const li = document.createElement('li');
-    if (r.id === self.id) {
+  for (const r of list) {
+    const item = document.createElement('li');
+    if (r.isSelf) {
       const me = document.createElement('strong');
       me.textContent = `${displayName(r)} · ${t('you')}`;
-      li.append(me);
+      item.append(me);
     } else {
-      li.textContent = displayName(r);
+      item.textContent = displayName(r);
     }
-    ul.append(li);
+    ul.append(item);
   }
   section.append(head, ul);
   banner.append(section);
 }
 
-async function loadTablemates(g: GuestMatch): Promise<void> {
+async function loadTablemates(g: GuestMatch, gen: number): Promise<void> {
   try {
     const rows = await tableGuests(g.id);
-    if (lastShown !== g) return;             // superseded by a later selection
+    if (gen !== tablematesGen) return;       // superseded OR same-guest re-entry
     lastTablemates = rows;
-    renderTablemates(g, rows);
+    renderTablemates(rows, g.id);
   } catch { /* supplementary — the seat already rendered; skip silently (spec) */ }
 }
 ```
@@ -456,12 +507,12 @@ In `showGuest`, after `fp.highlight(key);`, replace the `if (!opts.resurface) { 
 ```ts
   fp.highlight(key);
   if (opts.resurface) {
-    if (lastTablemates) renderTablemates(g, lastTablemates); // locale toggle: no refetch
+    if (lastTablemates) renderTablemates(lastTablemates, g.id); // locale toggle: no refetch
   } else {
     fp.zoomToSeat(key);
     burstPetals(mapEl);
     lastTablemates = null;
-    void loadTablemates(g);
+    void loadTablemates(g, ++tablematesGen);
   }
 ```
 
@@ -483,7 +534,7 @@ Expected: tsc clean; all tests pass.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add src/shared/types.ts src/shared/api.ts src/guest/i18n.ts src/guest/i18n.test.ts src/guest/main.ts src/styles.css
+git add src/shared/types.ts src/shared/api.ts src/guest/i18n.ts src/guest/i18n.test.ts src/guest/tablemates.ts src/guest/tablemates.test.ts src/guest/main.ts src/styles.css
 git commit -m "feat: At-your-table tablemate list in the guest banner (Part C client)"
 ```
 
