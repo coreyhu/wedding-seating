@@ -62,7 +62,9 @@ SELECT on `guests` by design — `0001_init.sql` does `revoke all on guests from
 anon`, and guest data is reached only through the `search_guests()` security-
 definer RPC. So this needs a new security-definer function granted to `anon`.
 
-**DB — new migration `supabase/migrations/0004_table_guests.sql`:**
+**DB — new migration `supabase/migrations/0005_table_guests.sql`** (numbered
+`0005`, not `0004`: the concurrent `feature/import-override` branch claims
+`0004_import_override.sql`)**:**
 
 ```sql
 create or replace function table_guests(p_guest_id uuid)
@@ -188,6 +190,38 @@ needed.
 
 ---
 
+## E. Footer credit
+
+A small signature on the **guest page** (`index.html`), fixed at the bottom
+center: "Made with ♥ by Lindsey Tam & Corey Hu".
+
+- Names are English-only in both locales — `couple.ts` records that the couple's
+  Chinese names aren't chosen yet, so the same names show for zh; only the
+  framing words localize.
+- New i18n key `credits` in `src/guest/i18n.ts`:
+  - en: `Made with ♥ by Lindsey Tam & Corey Hu`
+  - zh: `Lindsey Tam 与 Corey Hu 用 ♥ 制作` (first-pass — user may correct)
+- Render: a `<footer>` element (or a div in the overlay) with `pointer-events:
+  none` so it never blocks map panning, `z-index` below the toast (toast is 99),
+  and a subtle card/pill background so it doesn't blend into the SVG floorplan
+  (same lesson as the empty-state card in B). Muted text, ♥ in `--highlight` or
+  `--accent`.
+- Re-rendered on locale change (added to `renderStatics()`).
+
+---
+
+## Coordination with `feature/import-override` (concurrent branch)
+
+Both branches edit `src/host/import.ts` and add a `0004`/`0005` migration.
+Resolved: my migration is `0005` (no clash). The `import.ts` overlap is a
+normal merge — their edits (deletion-count in the preview + delete-absent
+semantics) and mine (mapping dropdowns + remap in the preview/Import handler)
+touch the same `onInput()`/preview/Import region but are logically independent.
+Whichever branch merges first, the other rebases. Built in an isolated worktree
+so the two efforts don't fight over the shared checkout.
+
+---
+
 ## Testing
 
 - **A:** unit test — the five amenities carry taglines with both `en` and `zh`;
@@ -203,13 +237,14 @@ needed.
      before import (errors, originals untouched).
   4. `defaultMapping` **always** returns a permutation of 1..12 — including
      partial-label-match and colliding-label cases.
+- **E:** unit test — `credits` key present with `en` and `zh`. (i18n.test.ts)
 
 ## Deploy dependency (must surface to user)
 
-Change **C requires applying migration `0004` to the live Supabase** (`supabase
+Change **C requires applying migration `0005` to the live Supabase** (`supabase
 db push`, or paste the SQL into the Supabase SQL editor). On merge alone,
 "At your table" returns nothing because `anon` can't read `guests` without the
-new function. A, B, and D are frontend-only (D changes no schema — `table_no`
+new function. A, B, D, and E are frontend-only (D changes no schema — `table_no`
 values just differ) and ship on merge.
 
 ## Out of scope / non-goals
