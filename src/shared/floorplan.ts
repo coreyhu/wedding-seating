@@ -29,6 +29,18 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const escapeId = (key: string): string =>
   typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(key) : key;
 
+// Map labels are SVG <text> sized in user units, so their on-screen size is
+// (fontUnits × containerPx / viewBoxWidth). To render at a consistent legible
+// size regardless of which Affinity export we're on (the v3 botanical map is
+// ~2× the coordinate space of v2 — a fixed 9-unit font rendered at ~3.5px),
+// scale the font to the viewBox width. Divisors tuned so a seat name reads
+// ~12px on a ~1600px-wide host window and grows as you pinch-zoom in.
+const LABEL_DIVISORS = { seat: 200, table: 130, landmark: 150 } as const;
+export function labelFontSize(viewBoxWidth: number, kind: keyof typeof LABEL_DIVISORS): number {
+  const w = viewBoxWidth > 0 ? viewBoxWidth : 1000;
+  return Math.round((w / LABEL_DIVISORS[kind]) * 10) / 10;
+}
+
 export function mountFloorplan(container: HTMLElement,
   opts: { panZoom?: boolean; svgText?: string; seatMap?: SeatMap } = {}): Floorplan {
   const seatMap = opts.seatMap ?? (generatedMap as SeatMap);
@@ -36,6 +48,25 @@ export function mountFloorplan(container: HTMLElement,
   const svg = container.querySelector('svg') as SVGSVGElement;
   svg.removeAttribute('width'); svg.removeAttribute('height');
   svg.classList.add('floorplan');
+  const vbW = Number(seatMap.viewBox.split(/\s+/)[2]) || 1000;
+  const fontFor = (kind: 'seat' | 'table' | 'landmark') => labelFontSize(vbW, kind);
+  // A white halo (paint-order: stroke under the fill) keeps labels legible
+  // over the map's varied colours. Halo width scales with the font.
+  const makeLabel = (cssClass: string, x: number, y: number, font: number, text: string): void => {
+    const el = document.createElementNS(SVG_NS, 'text');
+    el.setAttribute('x', String(x)); el.setAttribute('y', String(y));
+    el.setAttribute('font-size', String(font));
+    el.setAttribute('stroke', '#ffffff'); el.setAttribute('stroke-width', String(font * 0.18));
+    el.setAttribute('paint-order', 'stroke'); el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('class', cssClass);
+    el.textContent = text;
+    // Append INSIDE svg-pan-zoom's viewport group so labels share the map's
+    // pan/zoom transform. svg-pan-zoom strips the root's viewBox and moves the
+    // coordinate transform onto that group; a label on the root would render at
+    // raw user coordinates — far off-screen. Falls back to the root when
+    // pan/zoom is disabled (tests), where the viewBox is still intact.
+    (svg.querySelector('.svg-pan-zoom_viewport') ?? svg).append(el);
+  };
 
   const pz = opts.panZoom !== false
     ? svgPanZoom(svg, {
@@ -191,15 +222,14 @@ export function mountFloorplan(container: HTMLElement,
     addSeatLabel(key, text) {
       const seat = seatMap.seats[key]; if (!seat) return;
       const table = seatMap.tables[key.split('-')[0]!];
+      const font = fontFor('seat');
       let { cx, cy } = seat;
-      if (table) { // push label outward along table→seat direction
+      if (table) { // push label outward past the chair, scaled to the font
         const d = Math.hypot(cx - table.cx, cy - table.cy) || 1;
-        cx += ((cx - table.cx) / d) * 16; cy += ((cy - table.cy) / d) * 16;
+        const push = font * 1.1;
+        cx += ((cx - table.cx) / d) * push; cy += ((cy - table.cy) / d) * push;
       }
-      const t = document.createElementNS(SVG_NS, 'text');
-      t.setAttribute('x', String(cx)); t.setAttribute('y', String(cy));
-      t.setAttribute('class', 'seat-label'); t.textContent = text;
-      svg.append(t);
+      makeLabel('seat-label', cx, cy, font, text);
     },
     clearSeatLabels() { svg.querySelectorAll('.seat-label').forEach(e => e.remove()); },
     zoomToSeat(key) {
@@ -222,26 +252,20 @@ export function mountFloorplan(container: HTMLElement,
     },
     setTableLabels(labels) {
       svg.querySelectorAll('.table-label').forEach(e => e.remove());
+      const font = fontFor('table');
       for (const [no, text] of Object.entries(labels)) {
         const tb = seatMap.tables[no];
         if (!tb || !text) continue;
-        const el = document.createElementNS(SVG_NS, 'text');
-        el.setAttribute('x', String(tb.cx)); el.setAttribute('y', String(tb.cy - tb.r - 6));
-        el.setAttribute('class', 'table-label');
-        el.textContent = text;
-        svg.append(el);
+        makeLabel('table-label', tb.cx, tb.cy - tb.r - font * 0.6, font, text);
       }
     },
     setLandmarkLabels(labels) {
       svg.querySelectorAll('.landmark-label').forEach(e => e.remove());
+      const font = fontFor('landmark');
       for (const [id, text] of Object.entries(labels)) {
         const lm = seatMap.landmarks[id];
         if (!lm || !text) continue;
-        const el = document.createElementNS(SVG_NS, 'text');
-        el.setAttribute('x', String(lm.cx)); el.setAttribute('y', String(lm.cy));
-        el.setAttribute('class', 'landmark-label');
-        el.textContent = text;
-        svg.append(el);
+        makeLabel('landmark-label', lm.cx, lm.cy, font, text);
       }
     },
   };

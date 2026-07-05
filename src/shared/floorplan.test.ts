@@ -1,6 +1,23 @@
-import { beforeEach, expect, it, vi } from 'vitest';
-import { mountFloorplan } from './floorplan';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { labelFontSize, mountFloorplan } from './floorplan';
 import type { SeatMap } from './types';
+
+describe('labelFontSize', () => {
+  it('scales the font to the viewBox so on-screen size is stable across exports', () => {
+    // v3 map (~4850 wide) must yield a much larger unit font than the old
+    // ~2283-wide map — the fixed 9-unit font that rendered at ~3.5px is the bug.
+    expect(labelFontSize(4850, 'seat')).toBeGreaterThan(20);
+    expect(labelFontSize(4850, 'seat')).toBeCloseTo(24.3, 0);
+    // bigger coordinate space → bigger unit font, proportionally
+    expect(labelFontSize(4850, 'seat')).toBeGreaterThan(labelFontSize(2283, 'seat'));
+    // table names are larger than seat names; landmarks in between
+    expect(labelFontSize(4850, 'table')).toBeGreaterThan(labelFontSize(4850, 'seat'));
+    expect(labelFontSize(4850, 'landmark')).toBeGreaterThan(labelFontSize(4850, 'seat'));
+  });
+  it('falls back to a sane width when the viewBox is missing/zero', () => {
+    expect(labelFontSize(0, 'seat')).toBeGreaterThan(0);
+  });
+});
 
 const svgText = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <g id="table-1"><path id="table-1-shape" d="M40 40 h20 v20 h-20 z"/>
