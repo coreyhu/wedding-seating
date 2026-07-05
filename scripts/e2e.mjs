@@ -1,4 +1,4 @@
-// E2E regression suite (28 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
+// E2E regression suite (30 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/unseat-all/table-rename/matrix-import, pinyin-bridge.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // NOTE: `supabase db reset` wipes auth.users — host@test.dev is NOT in seed.sql
@@ -245,6 +245,22 @@ await bridgePage.fill('#q', '胡向平');
 await bridgePage.waitForSelector('#banner:not([hidden])', { timeout: 8000 });
 check('bridge: 汉字 search finds pinyin-only guest', /Xiang Ping Hu/.test(await bridgePage.textContent('#banner')));
 await bridgePage.close();
+
+// ---------- UNSEAT ALL (destructive; re-imports MATRIX after to stay rerun-stable) ----------
+// `page` is still the authenticated host page from the matrix block above.
+const seatedBefore = await page.locator('svg .seat.occupied').count();
+await page.click('#unseat-all'); // arm
+check('unseat-all: first tap arms with confirm prompt',
+  /everyone/i.test(await page.textContent('#unseat-all')));
+await page.click('#unseat-all'); // confirm
+await page.waitForFunction(() => document.querySelectorAll('svg .seat.occupied').length === 0, null, { timeout: 8000 });
+check('unseat-all: confirm clears every seat', seatedBefore > 0 &&
+  (await page.locator('svg .seat.occupied').count()) === 0);
+// restore the seated superset so the suite is rerun-stable
+await page.fill('#csv', MATRIX);
+await page.waitForSelector('#csv-go:not([disabled])');
+await page.click('#csv-go');
+await page.waitForFunction(() => document.querySelectorAll('svg .seat.occupied').length > 0, null, { timeout: 8000 });
 
 await browser.close();
 const failed = results.filter(r => !r.ok);
