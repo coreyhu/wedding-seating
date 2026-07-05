@@ -31,6 +31,16 @@ function renderStatics(): void {
   renderTableLabels();
   renderLandmarkLabels();
   renderChips();
+  renderCredits();
+}
+
+function renderCredits(): void {
+  const el = document.querySelector('#credits')!;
+  const [before, after] = t('credits').split('♥');
+  const heart = document.createElement('span');
+  heart.className = 'heart';
+  heart.textContent = '♥';
+  el.replaceChildren(before ?? '', heart, after ?? '');
 }
 
 function renderTableLabels(): void {

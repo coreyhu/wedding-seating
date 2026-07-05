@@ -8,6 +8,7 @@ const STRINGS = {
   connectionTrouble: { en: 'Connection trouble', zh: '网络异常' },
   retry: { en: 'Retry', zh: '重试' },
   toggle: { en: '中文', zh: 'EN' }, // the language you'd switch TO
+  credits: { en: 'Made with ♥ by Lindsey Tam & Corey Hu', zh: 'Lindsey Tam 与 Corey Hu 用 ♥ 制作' },
 } as const;
 export type StringKey = keyof typeof STRINGS;
 

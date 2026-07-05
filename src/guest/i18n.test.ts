@@ -60,3 +60,10 @@ it('empty-state copy points guests to the planner (both locales)', () => {
   setLocale('zh');
   expect(t('emptyState')).toBe('找不到您的名字？请咨询我们的策划师。');
 });
+it('credits key exists in both locales and contains a heart', () => {
+  expect(t('credits')).toContain('♥');
+  expect(t('credits')).toContain('Lindsey Tam');
+  setLocale('zh');
+  expect(t('credits')).toContain('♥');
+  expect(t('credits')).toContain('Corey Hu');
+});
