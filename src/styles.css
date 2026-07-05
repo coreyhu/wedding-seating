@@ -95,3 +95,7 @@ body.picking .seat:not(.highlight) { opacity: 0.75; }
 .tablemates ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .tablemates li { font-size: 15px; color: var(--ink); }
 .tablemates strong { font-family: var(--serif); color: var(--accent-deep); }
+
+.csv-mapping { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.csv-mapping .map-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; }
+.csv-mapping select { padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; }
