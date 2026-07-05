@@ -78,3 +78,11 @@ it('setLandmarkLabels draws at landmark coords and replaces on re-call', () => {
   expect(els).toHaveLength(1);
   expect(els[0]!.textContent).toBe('酒吧');
 });
+it('mounting without panZoom attaches no gesture handlers that throw on pointer events', () => {
+  const fp = mount();
+  expect(() => {
+    fp.svg.dispatchEvent(new Event('pointerdown'));
+    fp.svg.dispatchEvent(new Event('pointermove'));
+    fp.svg.dispatchEvent(new Event('pointerup'));
+  }).not.toThrow();
+});

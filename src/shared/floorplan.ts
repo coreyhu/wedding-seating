@@ -47,6 +47,54 @@ export function mountFloorplan(container: HTMLElement,
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => { pz!.resize(); pz!.fit(); pz!.center(); }, 150);
     });
+
+    // svg-pan-zoom has no touch support; hand-rolled pinch/pan for non-mouse pointers.
+    const touches = new Map<number, { x: number; y: number }>();
+    let pinchDist = 0;
+    let gestureActive = false;
+    const mid = () => {
+      const [a, b] = [...touches.values()];
+      return { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+    };
+    const dist = () => {
+      const [a, b] = [...touches.values()];
+      return Math.hypot(a!.x - b!.x, a!.y - b!.y);
+    };
+    svg.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse') return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) { pinchDist = dist(); gestureActive = true; }
+    });
+    svg.addEventListener('pointermove', e => {
+      if (e.pointerType === 'mouse' || !touches.has(e.pointerId)) return;
+      const prev = touches.get(e.pointerId)!;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 1) {
+        const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+        if (gestureActive || Math.hypot(dx, dy) > 3) {
+          gestureActive = true;
+          e.preventDefault();
+          pz!.panBy({ x: dx, y: dy });
+        }
+      } else if (touches.size === 2) {
+        e.preventDefault();
+        const d = dist();
+        if (pinchDist > 0 && d > 0) {
+          const rect = svg.getBoundingClientRect();
+          const m = mid();
+          pz!.zoomAtPoint(pz!.getZoom() * (d / pinchDist),
+            { x: m.x - rect.left, y: m.y - rect.top });
+        }
+        pinchDist = d;
+      }
+    });
+    const endTouch = (e: PointerEvent) => {
+      touches.delete(e.pointerId);
+      if (touches.size < 2) pinchDist = 0;
+      if (touches.size === 0) gestureActive = false;
+    };
+    svg.addEventListener('pointerup', endTouch);
+    svg.addEventListener('pointercancel', endTouch);
   }
 
   const seatEl = (key: SeatKey) => svg.querySelector<SVGGraphicsElement>(`#seat-${escapeId(key)}`)

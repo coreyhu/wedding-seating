@@ -1,6 +1,10 @@
-// E2E regression suite (25 checks): guest search/highlight/toast-retry/eggs/layout/amenities, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
+// E2E regression suite (26 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/table-rename/matrix-import, pinyin-bridge.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
+// NOTE: `supabase db reset` wipes auth.users — host@test.dev is NOT in seed.sql
+// (it's a manually-created Studio/Admin-API user, see deploy-runbook.md §2.3-4).
+// After a reset, recreate it (POST /auth/v1/admin/users with the service-role
+// key, then `insert into admins (user_id) values ('<uuid>')`) before running this.
 // Host-page mutations are reverted at the end; safe against the seed data.
 // End-to-end verification against the live dev server + local Supabase.
 // Read-only where possible; host-page mutations are reverted at the end.
@@ -78,6 +82,18 @@ const mapBox = await page.locator('#map').boundingBox();
 const vp = page.viewportSize();
 check('layout: map fills the viewport', mapBox.width >= vp.width - 2 && mapBox.height >= vp.height - 2);
 
+// ---------- MOBILE GESTURES ----------
+// CDP Input.synthesizePinchGesture drives real touch-event synthesis in chromium;
+// exercises the hand-rolled pinch handler in floorplan.ts (svg-pan-zoom has no touch support).
+const beforeMatrix = await page.evaluate(() =>
+  document.querySelector('.svg-pan-zoom_viewport')?.getAttribute('transform') ?? '');
+const cdp = await page.context().newCDPSession(page);
+await cdp.send('Input.synthesizePinchGesture', { x: vp.width / 2, y: vp.height / 2, scaleFactor: 2, relativeSpeed: 300 });
+await page.waitForTimeout(400);
+const afterMatrix = await page.evaluate(() =>
+  document.querySelector('.svg-pan-zoom_viewport')?.getAttribute('transform') ?? '');
+check('mobile: pinch zooms the map', beforeMatrix !== '' && beforeMatrix !== afterMatrix, `${beforeMatrix} -> ${afterMatrix}`);
+
 // ---------- AMENITIES ----------
 await page.fill('#q', '');
 await page.locator('.chip', { hasText: 'Restrooms' }).click();
@@ -100,6 +116,9 @@ await Promise.all([page.waitForNavigation(), page.click('.login button')]);
 await page.waitForSelector('#map svg', { timeout: 8000 });
 check('host: login lands on map', true);
 
+// guard against a race with the async refresh(): #map svg can appear before
+// occupied seats are painted, which intermittently counted occupied=0/labels=0.
+await page.waitForFunction(() => document.querySelectorAll('svg .seat.occupied').length > 0, null, { timeout: 8000 });
 const occupiedBefore = await page.locator('svg .seat.occupied').count();
 const labels = await page.locator('svg .seat-label').count();
 check('host: occupied chairs color-coded with labels', occupiedBefore >= 6 && labels === occupiedBefore, `occupied=${occupiedBefore} labels=${labels}`);

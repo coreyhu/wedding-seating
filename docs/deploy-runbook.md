@@ -120,6 +120,34 @@ URL could otherwise create an account. Before adding the real host user:
       sheet noise (e.g. `Kevin Hu +1`, truncated `<Visa Pend…` cells), so
       noise imports as real seated guests; clean the Sheet, not the app.
 
+## Testing from a phone (dev)
+
+The map now supports pinch-to-zoom and one-finger pan on touch devices — to
+try it on an actual phone against your local dev server instead of waiting
+for a deploy:
+
+1. Start Vite bound to all interfaces, not just localhost:
+
+   ```sh
+   npx vite --host
+   ```
+
+2. Find your Mac's LAN IP: `ipconfig getifaddr en0`. On the phone,
+   `127.0.0.1` means "the phone itself," so `.env.local`'s
+   `VITE_SUPABASE_URL` needs to point at that LAN IP (not `127.0.0.1`) or the
+   phone can't reach your local Supabase — e.g.
+   `VITE_SUPABASE_URL=http://192.168.1.23:54321`. Restart Vite after editing
+   `.env.local` so the new value is picked up.
+3. Make sure the phone and the Mac are on the **same Wi-Fi network**.
+4. Generate a QR code for the LAN URL so you don't have to type it on the
+   phone's keyboard:
+
+   ```sh
+   npm run qr -- http://<lan-ip>:5173
+   ```
+
+   Scan `qr.png` with the phone's camera to open the page directly.
+
 ## Floorplan re-export loop (for future edits, e.g. Task 14)
 
 Whenever the venue layout changes:
