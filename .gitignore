@@ -6,3 +6,4 @@ dist/
 .env
 .env.local
 qr.png
+.DS_Store
