@@ -42,14 +42,17 @@ export function mountFloorplan(container: HTMLElement,
     : null;
 
   if (pz) {
+    let nResize = 0;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => { pz!.resize(); pz!.fit(); pz!.center(); }, 150);
+      resizeTimer = setTimeout(() => { nResize++; pz!.resize(); pz!.fit(); pz!.center(); }, 150);
     });
 
     // svg-pan-zoom has no touch support; hand-rolled pinch/pan for non-mouse pointers.
     let debugNote: ((s: string) => void) | undefined; // set only under ?fpdebug
+    let zMin = Infinity, zMax = -Infinity;
+    const moveCounts = new Map<number, number>();
     const touches = new Map<number, { x: number; y: number }>();
     let pinchDist = 0;
     let gestureActive = false;
@@ -69,6 +72,7 @@ export function mountFloorplan(container: HTMLElement,
     svg.addEventListener('pointermove', e => {
       if (e.pointerType === 'mouse' || !touches.has(e.pointerId)) return;
       const prev = touches.get(e.pointerId)!;
+      if (debugNote) moveCounts.set(e.pointerId, (moveCounts.get(e.pointerId) ?? 0) + 1);
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 1) {
         const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
@@ -87,9 +91,10 @@ export function mountFloorplan(container: HTMLElement,
             const reqZoom = pz!.getZoom() * (d / pinchDist);
             pz!.zoomAtPoint(reqZoom, { x: m.x - rect.left, y: m.y - rect.top });
             if (debugNote) {
-              const a = (svg.querySelector('.svg-pan-zoom_viewport')?.getAttribute('transform') ?? '')
-                .match(/matrix\(([-\d.]+)/)?.[1] ?? '?';
-              debugNote(`req=${reqZoom.toFixed(4)} got=${pz!.getZoom().toFixed(4)} dom_a=${Number(a).toFixed(4)}`);
+              const z = pz!.getZoom();
+              zMin = Math.min(zMin, z); zMax = Math.max(zMax, z);
+              const mv = [...moveCounts.entries()].map(([id, c]) => `${String(id).slice(-2)}:${c}`).join(' ');
+              debugNote(`z=${z.toFixed(3)} min=${zMin.toFixed(3)} MAX=${zMax.toFixed(3)}\nresizes=${nResize} moves[${mv}]`);
             }
           } catch (err) {
             debugNote?.(`PINCH ERR: ${String(err).slice(0, 120)}`);
