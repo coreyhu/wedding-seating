@@ -89,6 +89,7 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
   }
 
   async function onInput(): Promise<void> {
+    const mine = ++token;
     const r = parseSeatingMatrix(ta.value);
     tables = r.tables;
     guests = r.guests;
@@ -103,6 +104,7 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
     if (sig !== mappingSig) {
       let current: TableInfo[] = [];
       try { current = await getTables(); } catch { /* labels are a hint only; fall back to numbers */ }
+      if (mine !== token) return; // superseded during the getTables() fetch
       mapping = defaultMapping(tables, current.length ? current : tables.map(t => ({ table_no: t.table_no, label_en: `Table ${t.table_no}`, label_zh: `${t.table_no}号桌` })));
       mappingSig = sig;
       renderMapping(current);
@@ -111,7 +113,8 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
   }
 
   go.addEventListener('click', async () => {
-    const remapped = remapColumnsToTables({ tables, guests, errors: [] }, mapping);
+    const parsed = parseSeatingMatrix(ta.value);
+    const remapped = remapColumnsToTables(parsed, mapping);
     if (remapped.errors.length) { errorsEl.replaceChildren(...remapped.errors.map(li)); go.disabled = true; return; }
     try {
       const res = await importSeating({ tables: remapped.tables, guests: remapped.guests });
