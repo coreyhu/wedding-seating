@@ -93,8 +93,8 @@ export function mountFloorplan(container: HTMLElement,
             if (debugNote) {
               const z = pz!.getZoom();
               zMin = Math.min(zMin, z); zMax = Math.max(zMax, z);
-              const mv = [...moveCounts.entries()].map(([id, c]) => `${String(id).slice(-2)}:${c}`).join(' ');
-              debugNote(`z=${z.toFixed(3)} min=${zMin.toFixed(3)} MAX=${zMax.toFixed(3)}\nresizes=${nResize} moves[${mv}]`);
+              const pts = [...touches.values()].map(p => `(${p.x | 0},${p.y | 0})`).join(' ');
+              debugNote(`z=${z.toFixed(3)} MAX=${zMax.toFixed(3)} d=${d | 0}\nfingers ${pts}`);
             }
           } catch (err) {
             debugNote?.(`PINCH ERR: ${String(err).slice(0, 120)}`);
