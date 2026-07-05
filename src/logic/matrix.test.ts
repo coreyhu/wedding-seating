@@ -74,13 +74,22 @@ describe('defaultMapping', () => {
     expect(m[0]).toBe(7);            // column 1 (Peacock) defaults to table 7
     expect(new Set(m).size).toBe(12); // still a permutation
   });
-  it('always returns a permutation of 1..12 even when two labels collide', () => {
-    const existing = seeded.map(e => ({ ...e }));
-    existing[0] = { table_no: 1, label_en: 'Owl', label_zh: '' };
-    existing[4] = { table_no: 5, label_en: 'Owl', label_zh: '' }; // two tables both "Owl"
-    const m = defaultMapping(parsed.tables, existing);
+  it('two header groups matching the same existing label → first wins, the other gets an unused number (guard coverage)', () => {
+    // Columns 0 and 2 are BOTH "Owl"; the rest are distinct.
+    const tables = Array.from({ length: 12 }, (_, i) => ({
+      table_no: i + 1,
+      label_en: i === 0 || i === 2 ? 'Owl' : `Group ${i + 1}`,
+      label_zh: '',
+    }));
+    // "Owl" currently sits at venue table 9.
+    const existing = Array.from({ length: 12 }, (_, i) => ({
+      table_no: i + 1, label_en: `Table ${i + 1}`, label_zh: `${i + 1}号桌`,
+    }));
+    existing[8] = { table_no: 9, label_en: 'Owl', label_zh: '' };
+    const m = defaultMapping(tables, existing);
     expect(m).toHaveLength(12);
-    expect(new Set(m).size).toBe(12);
-    expect(m.every(n => n >= 1 && n <= 12)).toBe(true);
+    expect(new Set(m).size).toBe(12);          // valid permutation — no two groups share a table
+    expect([m[0], m[2]]).toContain(9);         // exactly one "Owl" column wins table 9
+    expect(m[0]).not.toBe(m[2]);               // the guard: they must NOT both get 9
   });
 });

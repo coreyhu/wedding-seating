@@ -51,7 +51,7 @@ export function remapColumnsToTables(r: MatrixResult, mapping: number[]): Matrix
   }
   const to = (provisional: number): number => mapping[provisional - 1]!;
   return {
-    errors: r.errors,
+    errors: [...r.errors],
     tables: r.tables.map(t => ({ ...t, table_no: to(t.table_no) })),
     guests: r.guests.map(g => ({ ...g, table_no: to(g.table_no) })),
   };
