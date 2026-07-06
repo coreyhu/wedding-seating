@@ -23,6 +23,7 @@ let lastMatches: GuestMatch[] | null = null;
 let lastShown: GuestMatch | null = null;
 let lastTablemates: Tablemate[] | null = null;
 let tablematesGen = 0;
+let lastAmenity: Amenity | null = null;
 
 const displayName = (g: { name_en: string; name_zh: string }) => [g.name_en, g.name_zh].filter(Boolean).join(' · ');
 const tableLabel = (g: GuestMatch) => pickLabel(g.label_en, g.label_zh);
@@ -69,6 +70,7 @@ function renderLandmarkLabels(): void {
 
 function showGuest(g: GuestMatch, opts: { resurface?: boolean } = {}): void {
   lastShown = g;
+  lastAmenity = null;
   results.replaceChildren();
   banner.className = 'banner';
   banner.hidden = false;
@@ -128,9 +130,10 @@ async function loadTablemates(g: GuestMatch, gen: number): Promise<void> {
   } catch { /* supplementary — the seat already rendered; skip silently (spec) */ }
 }
 
-function showAmenity(a: Amenity): void {
+function showAmenity(a: Amenity, opts: { resurface?: boolean } = {}): void {
   lastShown = null;
   lastMatches = null;
+  lastAmenity = a;
   results.replaceChildren();
   banner.className = 'banner';
   banner.hidden = false;
@@ -143,12 +146,13 @@ function showAmenity(a: Amenity): void {
     banner.append(document.createElement('br'), tag);
   }
   fp.highlight(null);
-  fp.zoomToLandmark(a.id);
+  if (!opts.resurface) fp.zoomToLandmark(a.id); // locale toggle re-renders text without re-zooming
 }
 
 function renderResults(matches: GuestMatch[]): void {
   lastMatches = matches;
   lastShown = null;
+  lastAmenity = null;
   banner.className = 'banner';
   banner.hidden = true;
   results.replaceChildren();
@@ -180,12 +184,12 @@ input.addEventListener('input', () => {
   timer = setTimeout(() => {
     const p = prepareQuery(input.value);
     if (p.kind === 'too-short') {
-      lastMatches = null; lastShown = null;
+      lastMatches = null; lastShown = null; lastAmenity = null;
       results.replaceChildren(); banner.hidden = true; fp.highlight(null);
       return;
     }
     if (matchesCouple(p)) {
-      lastMatches = null; lastShown = null;
+      lastMatches = null; lastShown = null; lastAmenity = null;
       results.replaceChildren();
       banner.hidden = false;
       banner.className = 'sweetheart-card';
@@ -220,6 +224,7 @@ langToggle.addEventListener('click', () => setLocale(getLocale() === 'en' ? 'zh'
 onLocaleChange(() => {
   renderStatics();
   if (lastShown) showGuest(lastShown, { resurface: true });
+  else if (lastAmenity) showAmenity(lastAmenity, { resurface: true });
   else if (lastMatches) renderResults(lastMatches);
 });
 
