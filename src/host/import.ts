@@ -85,15 +85,20 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
     const newCount = guests.filter(g => !existingIds.has(identity(g))).length;
     // Import is full-override: the sheet is the guest list, so anyone in the DB
     // but absent from the sheet is DELETED (seated or not) — count them all.
-    const willDelete = existing.filter(g => !sheetIds.has(identity(g))).length;
+    const toDelete = existing.filter(g => !sheetIds.has(identity(g)));
     preview.replaceChildren();
     const base = document.createElement('div');
     base.textContent = `${guests.length} guests across 12 tables · ${newCount} new · seated per your table mapping`;
     preview.append(base);
-    if (willDelete > 0) {
+    if (toDelete.length > 0) {
       const warn = document.createElement('div');
       warn.className = 'preview-warn';
-      warn.textContent = `⚠ ${willDelete} guest${willDelete === 1 ? '' : 's'} will be DELETED (absent from this sheet)`;
+      // Name the guests, not just a count — a destructive delete is easy to
+      // trigger by accident (a partial paste, or a name re-spelled between
+      // exports), and seeing WHO would go lets the host catch a surprise.
+      const names = toDelete.map(g => g.name_en || g.name_zh);
+      const shown = names.slice(0, 8).join(', ') + (names.length > 8 ? `, +${names.length - 8} more` : '');
+      warn.textContent = `⚠ ${toDelete.length} guest${toDelete.length === 1 ? '' : 's'} will be DELETED (absent from this sheet): ${shown}`;
       preview.append(warn);
     }
     go.disabled = false;
