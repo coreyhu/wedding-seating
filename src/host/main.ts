@@ -1,5 +1,5 @@
 import '@fontsource/fraunces/600.css';
-import { assignSeat, listGuests, listTables, setTableLabel, unseatAll, unseatGuest } from '../shared/api';
+import { assignSeat, listGuests, listTables, rotateTable, setTableLabel, swapTables, unseatAll, unseatGuest } from '../shared/api';
 import { mountFloorplan, type Floorplan } from '../shared/floorplan';
 import { toast } from '../shared/toast';
 import { requireAuth } from './auth';
@@ -165,7 +165,56 @@ function openTableEditor(tableNo: number): void {
   const close = document.createElement('button');
   close.textContent = 'Close';
   close.onclick = () => { p.hidden = true; };
-  p.append(title, en, zh, document.createElement('br'), save, close);
+
+  const rotate = document.createElement('button');
+  rotate.id = 'rotate-table';
+  rotate.textContent = 'Rotate seats →';
+  rotate.onclick = async () => {
+    try { await rotateTable(tableNo); }
+    catch (e) { return toast(e instanceof Error ? e.message : 'Failed'); }
+    await refresh();
+    openTableEditor(tableNo); // reopen so the host can rotate again
+  };
+  const swap = document.createElement('button');
+  swap.id = 'swap-table';
+  swap.textContent = 'Swap with table…';
+  swap.onclick = () => beginTableSwap(tableNo);
+
+  p.append(title, en, zh, document.createElement('br'), save, close,
+    document.createElement('br'), rotate, swap);
+}
+
+const tableLabelOf = (n: number) => tables.find(t => t.table_no === n)?.label_en || `Table ${n}`;
+let swapSource: number | null = null;
+
+function beginTableSwap(tableNo: number): void {
+  swapSource = tableNo;
+  document.body.classList.add('picking-table');
+  const p = panel();
+  p.hidden = false;
+  p.replaceChildren();
+  const msg = document.createElement('p');
+  const strong = document.createElement('strong');
+  strong.textContent = tableLabelOf(tableNo);
+  msg.append('Swapping ', strong, ' — tap another table to trade all its guests.');
+  const cancel = document.createElement('button');
+  cancel.id = 'swap-cancel';
+  cancel.textContent = 'Cancel';
+  cancel.onclick = cancelTableSwap;
+  p.append(msg, document.createElement('br'), cancel);
+}
+function cancelTableSwap(): void {
+  swapSource = null;
+  document.body.classList.remove('picking-table');
+  panel().hidden = true;
+}
+async function doTableSwap(target: number): Promise<void> {
+  const src = swapSource;
+  cancelTableSwap();
+  if (src == null || src === target) return;
+  try { await swapTables(src, target); }
+  catch (e) { return toast(e instanceof Error ? e.message : 'Swap failed'); }
+  await refresh();
 }
 
 function wireUnseatAll(): void {
@@ -194,6 +243,10 @@ function wireUnseatAll(): void {
 requireAuth(() => {
   fp = mountFloorplan(document.querySelector('#map')!);
   fp.onTap(hit => {
+    if (swapSource !== null) {                 // picking a table to swap with
+      if (hit.kind === 'table') void doTableSwap(hit.tableNo);
+      return;                                   // ignore seat taps while picking
+    }
     if (hit.kind === 'seat') return step(sm.tapSeat(mode, hit.key, bySeat.get(hit.key)?.id ?? null));
     if (mode.kind !== 'picking-dest') openTableEditor(hit.tableNo);
   });

@@ -171,5 +171,33 @@ begin
   perform set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111"}', true);
 end $$;
 
+-- rotate_table + swap_tables (self-contained: earlier blocks mutated the seed)
+do $$
+begin
+  delete from guests;
+  insert into guests (name_en, name_zh, table_no, seat_no) values
+    ('R1', '', 1, 1), ('R2', '', 1, 2), ('R3', '', 1, 8),
+    ('S1', '', 2, 1), ('S2', '', 2, 5);
+  perform rotate_table(1);
+  assert (select seat_no from guests where name_en = 'R1') = 2, 'rotate 1→2';
+  assert (select seat_no from guests where name_en = 'R2') = 3, 'rotate 2→3';
+  assert (select seat_no from guests where name_en = 'R3') = 1, 'rotate 8→1 (wrap)';
+  perform swap_tables(1, 2);
+  assert (select table_no from guests where name_en = 'R1') = 2, 'swap: R1 → table 2';
+  assert (select seat_no from guests where name_en = 'R1') = 2, 'swap preserves seat';
+  assert (select table_no from guests where name_en = 'S1') = 1, 'swap: S1 → table 1';
+  perform swap_tables(3, 3); -- no-op, must not error
+end $$;
+
+do $$
+begin
+  perform set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222"}', true);
+  begin perform rotate_table(1); raise exception 'non-admin rotated a table — gate broken';
+    exception when others then if sqlerrm not like '%not authorized%' then raise; end if; end;
+  begin perform swap_tables(1, 2); raise exception 'non-admin swapped tables — gate broken';
+    exception when others then if sqlerrm not like '%not authorized%' then raise; end if; end;
+  perform set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111"}', true);
+end $$;
+
 rollback;
 select 'SMOKE OK' as result;

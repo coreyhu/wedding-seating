@@ -1,4 +1,4 @@
-// E2E regression suite (31 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/unseat-all/table-rename/matrix-import, pinyin-bridge.
+// E2E regression suite (33 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/unseat-all/table-rename/rotate/swap/matrix-import, pinyin-bridge.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // NOTE: `supabase db reset` wipes auth.users — host@test.dev is NOT in seed.sql
@@ -225,6 +225,27 @@ await page.locator('#panel input').nth(1).fill('');
 await page.locator('#panel button', { hasText: 'Save' }).click();
 await page.waitForFunction(() =>
   ![...document.querySelectorAll('.table-label')].some(t => t.textContent === 'Fern'), null, { timeout: 5000 });
+
+// ---------- TABLE OPS: rotate + swap (seed seating; the matrix block below resets it) ----------
+// rotate table 2 (Victoria 2-1, Eric Liu 2-2 → 2-2, 2-3): seat 2-3 goes from empty to occupied.
+const occ23Before = await page.locator('svg [id="seat-2-3"].occupied').count();
+await page.locator('svg [id="table-2-shape"]').click({ force: true });
+await page.waitForSelector('#rotate-table');
+await page.click('#rotate-table');
+await page.waitForFunction(() => document.querySelector('svg [id="seat-2-3"]')?.classList.contains('occupied'), null, { timeout: 6000 });
+check('tables: rotate shifts occupants one seat', occ23Before === 0 &&
+  (await page.locator('svg [id="seat-2-3"].occupied').count()) === 1);
+
+// swap table 1 (4 guests) with table 5 (empty): table 5 becomes occupied, table 1 empties.
+await page.locator('svg [id="table-1-shape"]').click({ force: true });
+await page.waitForSelector('#swap-table');
+await page.click('#swap-table');
+await page.waitForSelector('body.picking-table');
+await page.locator('svg [id="table-5-shape"]').click({ force: true });
+await page.waitForFunction(() => document.querySelector('svg [id="seat-5-1"]')?.classList.contains('occupied'), null, { timeout: 6000 });
+check('tables: swap trades all occupants between two tables',
+  (await page.locator('svg [id="seat-5-1"].occupied').count()) === 1 &&
+  (await page.locator('svg [id="seat-1-1"].occupied').count()) === 0);
 
 // ---------- MATRIX IMPORT + PINYIN BRIDGE (last: mutates seating to a seed superset) ----------
 const MATRIX = ['Table 1 / 1号桌,Table 2 / 2号桌,Table 3 / 3号桌,Table 4 / 4号桌,Table 5 / 5号桌,Table 6 / 6号桌,Table 7 / 7号桌,Table 8 / 8号桌,Table 9 / 9号桌,Table 10 / 10号桌,Table 11 / 11号桌,Table 12 / 12号桌',

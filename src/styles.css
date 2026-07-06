@@ -112,6 +112,8 @@ body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(-
 .panel input { padding: 10px 12px; font-size: 15px; border: 1px solid var(--line); border-radius: 10px; }
 body.picking .floorplan { cursor: crosshair; }
 body.picking .seat:not(.highlight) { opacity: 0.75; }
+body.picking-table .floorplan { cursor: crosshair; }
+body.picking-table .seat { opacity: 0.45; }
 .login { display: flex; flex-direction: column; gap: 8px; max-width: 320px; margin: 48px auto; }
 .login input, .login button { padding: 11px; font-size: 16px; border: 1px solid var(--line); border-radius: 10px; }
 .login button { background: var(--accent-deep); color: #fff; border: 0; }
