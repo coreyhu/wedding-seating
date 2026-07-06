@@ -1,5 +1,5 @@
 import '@fontsource/fraunces/600.css';
-import { assignSeat, listGuests, listTables, setTableLabel, unseatGuest } from '../shared/api';
+import { assignSeat, listGuests, listTables, setTableLabel, unseatAll, unseatGuest } from '../shared/api';
 import { mountFloorplan, type Floorplan } from '../shared/floorplan';
 import { toast } from '../shared/toast';
 import { requireAuth } from './auth';
@@ -149,6 +149,29 @@ function openTableEditor(tableNo: number): void {
   p.append(title, en, zh, document.createElement('br'), save, close);
 }
 
+function wireUnseatAll(): void {
+  const btn = document.querySelector<HTMLButtonElement>('#unseat-all');
+  if (!btn) return;
+  let armed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const disarm = () => { armed = false; btn.classList.remove('armed'); btn.textContent = 'Unseat all'; };
+  btn.onclick = async () => {
+    if (!armed) {
+      armed = true;
+      btn.classList.add('armed');
+      btn.textContent = 'Unseat everyone?';
+      clearTimeout(timer);
+      timer = setTimeout(disarm, 3000);
+      return;
+    }
+    clearTimeout(timer);
+    disarm();
+    try { await unseatAll(); }
+    catch (e) { return toast(e instanceof Error ? e.message : 'Failed'); }
+    await refresh();
+  };
+}
+
 requireAuth(() => {
   fp = mountFloorplan(document.querySelector('#map')!);
   fp.onTap(hit => {
@@ -156,5 +179,6 @@ requireAuth(() => {
     if (mode.kind !== 'picking-dest') openTableEditor(hit.tableNo);
   });
   mountImport(document.querySelector('#import')!, refresh);
+  wireUnseatAll();
   void refresh();
 });

@@ -147,5 +147,26 @@ begin
   perform set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111"}', true);
 end $$;
 
+do $$
+declare v_cleared int;
+begin
+  assert (select count(*) from guests where table_no is not null) > 0, 'precondition: some guests seated';
+  v_cleared := unseat_all();
+  assert v_cleared > 0, 'unseat_all reports rows cleared';
+  assert (select count(*) from guests where table_no is not null) = 0, 'unseat_all clears every seat';
+end $$;
+
+do $$
+begin
+  perform set_config('request.jwt.claims', '{"sub":"22222222-2222-2222-2222-222222222222"}', true);
+  begin
+    perform unseat_all();
+    raise exception 'non-admin cleared seating via unseat_all — gate broken';
+  exception when others then
+    if sqlerrm not like '%not authorized%' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111"}', true);
+end $$;
+
 rollback;
 select 'SMOKE OK' as result;
