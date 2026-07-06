@@ -3,6 +3,27 @@
 One-time setup to take this from local dev to a live URL guests can scan into,
 plus the loop you'll re-run whenever the floorplan or guest list changes.
 
+## ✅ LIVE (deployed 2026-07-06)
+
+- **Site:** https://coreyandlindsey-seating.netlify.app (Netlify project `coreyandlindsey-seating`)
+- **Supabase project:** `xuqcebnguywdhzjnqmcp` (org "Wedding", us-west-1). Migrations 0001–0006 pushed; 12 tables + all guests migrated from local; signups disabled, email sign-in on.
+- **Host login:** corey.huym@gmail.com (password in gitignored `.superpowers/HOST_PASSWORD.txt`). DB password in `.superpowers/DB_PASSWORD.txt`.
+- **Build creds live in `.env.production.local`** (gitignored): `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` for the hosted project. This is REQUIRED and must win over `.env.local`.
+
+### ⚠️ The `.env.local` trap (cost us a broken first deploy)
+Vite gives `.env` **files** precedence over shell/inline env vars, and `.env.local` (used for local + phone testing, points at `127.0.0.1`/your LAN IP) would otherwise get baked into the production bundle — the live site then tries to reach your Mac and every request fails. `.env.production.local` outranks `.env.local` in a production build, so the hosted creds there are what get baked. Verify after any build: `grep -rl "supabase.co" dist/assets` (present) and `grep -rl "127.0.0.1\|192.168" dist/assets` (absent).
+
+### Redeploy loop (code, floorplan, or theme changes)
+```sh
+npm run build                                  # uses .env.production.local → hosted creds
+npx netlify-cli deploy --prod --dir=dist       # site is already linked
+```
+Schema changes: `supabase db push` (pushes new migrations to the hosted DB) BEFORE the frontend deploy.
+Guest-list changes day-of: just paste the updated Sheet into the LIVE host page's Import panel — no redeploy needed (data lives in Supabase, not the bundle).
+
+---
+## First-time setup reference (already done — kept for the record)
+
 ## 1. Create the hosted Supabase project
 
 1. In the [Supabase dashboard](https://supabase.com/dashboard), create a new project

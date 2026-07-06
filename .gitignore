@@ -8,3 +8,7 @@ dist/
 qr.png
 .DS_Store
 guests.csv
+
+# Local Netlify folder
+.netlify
+.env.*.local
