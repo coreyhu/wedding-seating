@@ -126,8 +126,11 @@ body.picking-table .seat { opacity: 0.45; }
 .credits .heart { color: var(--highlight); }
 
 .tablemates { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-.tablemates .tablemates-head { display: block; color: var(--gold); margin-bottom: 4px; }
-.tablemates ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.tablemates > .tablemates-head { color: var(--gold); cursor: pointer; list-style: none; padding: 2px 0; }
+.tablemates > .tablemates-head::-webkit-details-marker { display: none; }
+.tablemates > .tablemates-head::before { content: '▸ '; font-size: 11px; }
+.tablemates[open] > .tablemates-head::before { content: '▾ '; }
+.tablemates ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .tablemates li { font-size: 15px; color: var(--ink); }
 .tablemates strong { font-family: var(--serif); color: var(--accent-deep); }
 

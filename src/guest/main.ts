@@ -100,11 +100,14 @@ function showGuest(g: GuestMatch, opts: { resurface?: boolean } = {}): void {
 function renderTablemates(rows: Tablemate[], selfId: string): void {
   const list = tablemateRows(rows, selfId);
   if (list.length === 0) return; // solo at table → skip the section
-  const section = document.createElement('div');
+  // Collapsed by default so the tablemate list (up to 7 names) doesn't push the
+  // map off a phone screen; tap the summary to expand.
+  const section = document.createElement('details');
   section.className = 'tablemates';
-  const head = document.createElement('small');
+  const head = document.createElement('summary');
   head.className = 'tablemates-head';
-  head.textContent = t('atYourTable');
+  const others = list.filter(r => !r.isSelf).length;
+  head.textContent = `${t('atYourTable')} (${others})`;
   const ul = document.createElement('ul');
   for (const r of list) {
     const item = document.createElement('li');
