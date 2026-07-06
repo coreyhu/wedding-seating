@@ -13,11 +13,17 @@
       <div id="map" class="map tall"></div>
       <aside class="sidebar">
         <div class="sidebar-head">
-          <h2>Unseated <span id="unseated-count" class="badge"></span></h2>
-          <button id="unseat-all" class="unseat-all">Unseat all</button>
+          <div class="title-row">
+            <h2>Unseated <span id="unseated-count" class="count"></span></h2>
+            <button id="unseat-all" class="link-btn">Unseat all</button>
+          </div>
+          <div id="sidebar-stats" class="sidebar-stats"></div>
+          <input id="roster-filter" class="roster-filter" type="search" placeholder="Filter guests…" autocomplete="off" />
         </div>
-        <div id="unseated"></div>
-        <details id="import-box"><summary>Import guests (CSV)</summary><div id="import"></div></details>
+        <div id="unseated" class="roster"></div>
+        <div class="sidebar-foot">
+          <details id="import-box"><summary>Import from sheet (CSV)</summary><div id="import"></div></details>
+        </div>
       </aside>
       <div id="panel" class="panel" hidden></div>
     </div>

@@ -1,3 +1,22 @@
 [build]
   command = "npm run build"
   publish = "dist"
+
+# The guest seat-finder lives at /seating (serve index.html there, URL stays /seating).
+[[redirects]]
+  from = "/seating"
+  to = "/index.html"
+  status = 200
+
+# Bare domain → the canonical finder URL.
+[[redirects]]
+  from = "/"
+  to = "/seating"
+  status = 301
+  force = true
+
+# Clean host URL (also still reachable at /host.html).
+[[redirects]]
+  from = "/host"
+  to = "/host.html"
+  status = 200

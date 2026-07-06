@@ -29,15 +29,34 @@ async function refresh(): Promise<void> {
     fp.setOccupied(key, true);
     fp.addSeatLabel(key, g.name_en || g.name_zh);
   }
-  const unseated = guests.filter(g => g.table_no == null);
-  document.querySelector('#unseated-count')!.textContent = String(unseated.length);
-  const list = document.querySelector<HTMLElement>('#unseated')!;
-  list.innerHTML = '';
-  for (const g of unseated) {
-    const b = document.createElement('button');
-    b.className = 'card'; b.textContent = nameOf(g);
-    b.onclick = () => step(sm.pickUnseated(mode, g.id));
-    list.append(b);
+  unseatedList = guests.filter(g => g.table_no == null);
+  const seated = guests.length - unseatedList.length;
+  document.querySelector('#unseated-count')!.textContent = String(unseatedList.length);
+  document.querySelector('#sidebar-stats')!.textContent =
+    `${seated} of ${guests.length} seated · ${tables.length} tables`;
+  renderRoster();
+}
+
+let unseatedList: Guest[] = [];
+function renderRoster(): void {
+  const filter = (document.querySelector<HTMLInputElement>('#roster-filter')?.value ?? '').trim().toLowerCase();
+  const box = document.querySelector<HTMLElement>('#unseated')!;
+  box.replaceChildren();
+  const shown = unseatedList.filter(g =>
+    !filter || g.name_en.toLowerCase().includes(filter) || g.name_zh.includes(filter));
+  if (!shown.length) {
+    const empty = document.createElement('div');
+    empty.className = 'roster-empty';
+    empty.textContent = unseatedList.length ? 'No matches' : 'Everyone has a seat 🌿';
+    box.append(empty);
+    return;
+  }
+  for (const g of shown) {
+    const row = document.createElement('button');
+    row.className = 'roster-row';
+    row.textContent = nameOf(g);
+    row.onclick = () => step(sm.pickUnseated(mode, g.id));
+    box.append(row);
   }
 }
 
@@ -180,5 +199,6 @@ requireAuth(() => {
   });
   mountImport(document.querySelector('#import')!, refresh);
   wireUnseatAll();
+  document.querySelector('#roster-filter')?.addEventListener('input', renderRoster);
   void refresh();
 });
