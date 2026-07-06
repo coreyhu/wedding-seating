@@ -72,6 +72,7 @@ body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(-
 .toast button { background: var(--accent-deep); color: #fff; border: 0; border-radius: 8px; padding: 6px 12px; }
 
 .import-errors { color: var(--highlight); font-size: 14px; padding-left: 18px; margin: 4px 0; }
+.preview-warn { color: var(--highlight); font-weight: 600; margin-top: 4px; }
 .hostwrap #app { display: grid; grid-template-columns: 1fr 300px; gap: 12px; padding: 12px; }
 .map.tall { height: calc(100vh - 120px); }
 .sidebar { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }

@@ -49,9 +49,12 @@ begin
     ))) into r;
   assert (r->>'new')::int = 1, 'one new guest';
   assert (r->>'imported')::int = 2, 'two seated';
+  assert (r->>'deleted')::int >= 1, 'import reports deleted absentees';
   assert (select label_en from tables where table_no = 1) = 'Peacock', 'label applied';
   assert (select table_no from guests where name_en = 'Carol Zhao') = 4, 'carol moved by import';
-  assert (select count(*) from guests where name_en = 'Kevin Hu' and table_no is not null) = 0, 'absent guests unseated';
+  -- full override: guests absent from the payload are DELETED, not just unseated
+  assert (select count(*) from guests where name_en = 'Kevin Hu') = 0, 'absent guests deleted entirely';
+  assert (select count(*) from guests) = 2, 'only the two payload guests remain';
 end $$;
 
 -- an authenticated user who is NOT in admins must not be able to write

@@ -83,8 +83,19 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
     const existingIds = new Set(existing.map(identity));
     const sheetIds = new Set(guests.map(identity));
     const newCount = guests.filter(g => !existingIds.has(identity(g))).length;
-    const willUnseat = existing.filter(g => g.table_no != null && !sheetIds.has(identity(g))).length;
-    preview.textContent = `${guests.length} guests across 12 tables · ${newCount} new · ${willUnseat} will become unseated · seated per your table mapping`;
+    // Import is full-override: the sheet is the guest list, so anyone in the DB
+    // but absent from the sheet is DELETED (seated or not) — count them all.
+    const willDelete = existing.filter(g => !sheetIds.has(identity(g))).length;
+    preview.replaceChildren();
+    const base = document.createElement('div');
+    base.textContent = `${guests.length} guests across 12 tables · ${newCount} new · seated per your table mapping`;
+    preview.append(base);
+    if (willDelete > 0) {
+      const warn = document.createElement('div');
+      warn.className = 'preview-warn';
+      warn.textContent = `⚠ ${willDelete} guest${willDelete === 1 ? '' : 's'} will be DELETED (absent from this sheet)`;
+      preview.append(warn);
+    }
     go.disabled = false;
   }
 
@@ -119,7 +130,7 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
     try {
       const res = await importSeating({ tables: remapped.tables, guests: remapped.guests });
       existingPromise = null; tablesPromise = null; mappingSig = '';
-      toast(`Imported ${res.imported} seats (${res.new} new guests, ${res.unseated} unseated)`);
+      toast(`Imported ${res.imported} seats (${res.new} new guests, ${res.deleted} deleted)`);
       onDone();
     } catch (e) { toast(e instanceof Error ? e.message : 'Import failed'); }
   });

@@ -1,4 +1,4 @@
-// E2E regression suite (30 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/unseat-all/table-rename/matrix-import, pinyin-bridge.
+// E2E regression suite (31 checks): guest search/highlight/toast-retry/eggs/layout/mobile-pinch/amenities, host login/assign/swap/unseat/unseat-all/table-rename/matrix-import, pinyin-bridge.
 // Prereqs: local Supabase running + seeded (supabase db reset), host@test.dev in admins,
 // dev server on 5199: `npx vite --port 5199 --strictPort` — then `npm run e2e`.
 // NOTE: `supabase db reset` wipes auth.users — host@test.dev is NOT in seed.sql
@@ -44,7 +44,7 @@ check('guest: single CJK char auto-selects 刘艾瑞', true);
 await page.fill('#q', 'zzzz');
 await page.waitForSelector('.empty', { timeout: 5000 });
 const empty = await page.textContent('.empty');
-check('guest: no-match shows bilingual help', /welcome table|迎宾台/.test(empty));
+check('guest: no-match shows bilingual help', /planner|策划师/.test(empty));
 
 // network failure -> toast -> retry
 await ctx.route('**/rest/v1/rpc/search_guests**', r => r.abort());
@@ -237,7 +237,10 @@ await page.fill('#csv', MATRIX);
 await page.waitForSelector('#csv-go:not([disabled])');
 await page.click('#csv-go');
 await page.waitForSelector('.toast', { timeout: 8000 });
-check('import: matrix toast reports 8 seats imported', /Imported 8 seats/.test(await page.textContent('.toast')));
+// full-override toast: "Imported 8 seats (N new, M deleted)" — counts vary by run
+// (first run deletes José/Tiger absent from MATRIX; reruns delete 0), so match the shape.
+check('import: matrix toast reports 8 seats + new/deleted counts',
+  /Imported 8 seats \(\d+ new guests?, \d+ deleted\)/.test(await page.textContent('.toast')));
 
 const bridgePage = await ctx.newPage();
 await bridgePage.goto(BASE + '/');
@@ -245,6 +248,15 @@ await bridgePage.fill('#q', '胡向平');
 await bridgePage.waitForSelector('#banner:not([hidden])', { timeout: 8000 });
 check('bridge: 汉字 search finds pinyin-only guest', /Xiang Ping Hu/.test(await bridgePage.textContent('#banner')));
 await bridgePage.close();
+
+// import override: José García is absent from MATRIX, so the import DELETED him
+// (not just unseated) — a name search must find nobody. Rerun-stable (stays deleted).
+const delPage = await ctx.newPage();
+await delPage.goto(BASE + '/');
+await delPage.fill('#q', 'garcia');
+await delPage.waitForSelector('.empty', { timeout: 6000 });
+check('import override: absent guest deleted (no José García)', (await delPage.locator('.card').count()) === 0);
+await delPage.close();
 
 // ---------- UNSEAT ALL (destructive; re-imports MATRIX after to stay rerun-stable) ----------
 // `page` is still the authenticated host page from the matrix block above.
@@ -261,6 +273,16 @@ await page.fill('#csv', MATRIX);
 await page.waitForSelector('#csv-go:not([disabled])');
 await page.click('#csv-go');
 await page.waitForFunction(() => document.querySelectorAll('svg .seat.occupied').length > 0, null, { timeout: 8000 });
+// Import-override DELETES guests absent from the sheet, so unlike the old
+// unseat semantics no unseated guests survive an import. The host section
+// (run first, on a rerun) needs at least one unseated guest to test assignment,
+// so leave one: unseat 王奶奶 at seat 3-1 — a seat/guest no other check touches
+// (the swap uses 1-1/1-2, assign uses 5-1, rename uses table 1). Rerun-stable
+// without a db reset between runs.
+await page.locator('svg [id="seat-3-1"]').click({ force: true });
+await page.waitForSelector('#panel:not([hidden])');
+await page.click('#unseat');
+await page.waitForFunction(sel => !document.querySelector(sel)?.classList.contains('occupied'), 'svg [id="seat-3-1"]', { timeout: 8000 });
 
 await browser.close();
 const failed = results.filter(r => !r.ok);

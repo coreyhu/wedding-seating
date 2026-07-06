@@ -28,7 +28,7 @@ export const unseatGuest = async (guestId: string): Promise<void> => {
 export const unseatAll = async (): Promise<number> =>
   unwrap(await supabase.rpc('unseat_all', {}));
 export const importSeating = async (payload: { tables: MatrixTable[]; guests: MatrixGuest[] }):
-  Promise<{ imported: number; new: number; unseated: number }> =>
+  Promise<{ imported: number; new: number; deleted: number }> =>
   unwrap(await supabase.rpc('import_seating', { payload }));
 export const setTableLabel = async (tableNo: number, labelEn: string, labelZh: string): Promise<void> => {
   unwrap(await supabase.rpc('set_table_label', { p_table_no: tableNo, p_label_en: labelEn, p_label_zh: labelZh }));
