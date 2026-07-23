@@ -1,4 +1,4 @@
-import { addGuest, listGuests, removeGuest } from '../shared/api';
+import { addGuest, listGuests, removeGuest, updateGuestName } from '../shared/api';
 import { toast } from '../shared/toast';
 import type { Guest } from '../shared/types';
 
@@ -8,7 +8,7 @@ export function mountGuestList(el: HTMLElement, onDone: () => Promise<void>): vo
   const form = document.createElement('form');
   form.className = 'guest-form';
   const intro = document.createElement('p');
-  intro.textContent = 'Add a guest, or remove one from the current list.';
+  intro.textContent = 'Add, edit, or remove a guest from the current list.';
   const en = document.createElement('input');
   en.name = 'name-en';
   en.placeholder = 'English name';
@@ -71,7 +71,57 @@ export function mountGuestList(el: HTMLElement, onDone: () => Promise<void>): vo
           toast(error instanceof Error ? error.message : 'Could not remove guest');
         }
       };
-      row.append(details, remove);
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'edit-guest';
+      edit.textContent = 'Edit';
+      edit.onclick = () => {
+        const editForm = document.createElement('form');
+        editForm.className = 'guest-edit-form';
+        const enInput = document.createElement('input');
+        enInput.name = 'name-en';
+        enInput.placeholder = 'English name';
+        enInput.autocomplete = 'name';
+        enInput.value = guest.name_en;
+        const zhInput = document.createElement('input');
+        zhInput.name = 'name-zh';
+        zhInput.placeholder = '中文名';
+        zhInput.autocomplete = 'name';
+        zhInput.value = guest.name_zh;
+        const actions = document.createElement('div');
+        actions.className = 'guest-list-actions';
+        const save = document.createElement('button');
+        save.type = 'submit';
+        save.textContent = 'Save';
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'cancel-edit-guest';
+        cancel.textContent = 'Cancel';
+        cancel.onclick = render;
+        actions.append(save, cancel);
+        editForm.append(enInput, zhInput, actions);
+        editForm.addEventListener('submit', async event => {
+          event.preventDefault();
+          save.disabled = true;
+          cancel.disabled = true;
+          try {
+            await updateGuestName(guest.id, enInput.value, zhInput.value);
+            toast('Guest name updated');
+            await reload();
+            await onDone();
+          } catch (error) {
+            save.disabled = false;
+            cancel.disabled = false;
+            toast(error instanceof Error ? error.message : 'Could not update guest name');
+          }
+        });
+        row.replaceChildren(editForm);
+        enInput.focus();
+      };
+      const actions = document.createElement('div');
+      actions.className = 'guest-list-actions';
+      actions.append(edit, remove);
+      row.append(details, actions);
       list.append(row);
     }
   };

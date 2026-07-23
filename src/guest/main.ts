@@ -10,7 +10,12 @@ import { COUPLE, matchesCouple } from './couple';
 import { AMENITIES, matchAmenity, type Amenity } from './amenities';
 import { tablemateRows } from './tablemates';
 
-const fp = mountFloorplan(document.querySelector('#map')!);
+const fp = mountFloorplan(document.querySelector('#map')!, {
+  capLabelZoom: true,
+  // Once a guest has zoomed in to find their chair, the table name no longer
+  // helps navigation and can obscure the seat ring.
+  hideTableLabelsOnZoom: true,
+});
 const input = document.querySelector<HTMLInputElement>('#q')!;
 const results = document.querySelector<HTMLElement>('#results')!;
 const banner = document.querySelector<HTMLElement>('#banner')!;

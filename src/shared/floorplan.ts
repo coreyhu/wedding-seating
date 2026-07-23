@@ -51,8 +51,18 @@ export function zoomCappedLabelFontSize(baseSize: number, zoom: number): number 
   return (baseSize * maxScreenScale) / Math.max(maxScreenScale, zoom);
 }
 
+export function shouldHideTableLabels(zoom: number): boolean {
+  return zoom > 1.6;
+}
+
 export function mountFloorplan(container: HTMLElement,
-  opts: { panZoom?: boolean; svgText?: string; seatMap?: SeatMap; capLabelZoom?: boolean } = {}): Floorplan {
+  opts: {
+    panZoom?: boolean;
+    svgText?: string;
+    seatMap?: SeatMap;
+    capLabelZoom?: boolean;
+    hideTableLabelsOnZoom?: boolean;
+  } = {}): Floorplan {
   const seatMap = opts.seatMap ?? (generatedMap as SeatMap);
   container.innerHTML = opts.svgText ?? generatedSvg;
   const svg = container.querySelector('svg') as SVGSVGElement;
@@ -79,14 +89,19 @@ export function mountFloorplan(container: HTMLElement,
   let labelZoom = 1;
   const updateLabelSizes = (zoom: number): void => {
     labelZoom = zoom;
-    if (!opts.capLabelZoom) return;
-    svg.querySelectorAll<SVGTextElement>('[data-base-label-font]').forEach(el => {
-      const baseFont = Number(el.dataset.baseLabelFont);
-      if (!baseFont) return;
-      const font = zoomCappedLabelFontSize(baseFont, zoom);
-      el.setAttribute('font-size', String(font));
-      el.setAttribute('stroke-width', String(font * 0.18));
-    });
+    if (opts.capLabelZoom) {
+      svg.querySelectorAll<SVGTextElement>('[data-base-label-font]').forEach(el => {
+        const baseFont = Number(el.dataset.baseLabelFont);
+        if (!baseFont) return;
+        const font = zoomCappedLabelFontSize(baseFont, zoom);
+        el.setAttribute('font-size', String(font));
+        el.setAttribute('stroke-width', String(font * 0.18));
+      });
+    }
+    if (opts.hideTableLabelsOnZoom) {
+      const visibility = shouldHideTableLabels(zoom) ? 'hidden' : 'visible';
+      svg.querySelectorAll('.table-label').forEach(el => el.setAttribute('visibility', visibility));
+    }
   };
   // A white halo (paint-order: stroke under the fill) keeps labels legible
   // over the map's varied colours. Halo width scales with the font.
@@ -322,6 +337,9 @@ export function mountFloorplan(container: HTMLElement,
         // than trusting a table-path coordinate that may be offset in an SVG
         // export.
         makeLabel('table-label', tb.cx, tb.cy, font, text);
+      }
+      if (opts.hideTableLabelsOnZoom && shouldHideTableLabels(labelZoom)) {
+        svg.querySelectorAll('.table-label').forEach(el => el.setAttribute('visibility', 'hidden'));
       }
     },
     setLandmarkLabels(labels) {

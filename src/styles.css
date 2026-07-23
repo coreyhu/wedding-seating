@@ -119,8 +119,18 @@ body { margin: 0; font-family: var(--sans); color: var(--ink); background: var(-
 .guest-list-row span { min-width: 0; display: grid; }
 .guest-list-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .guest-list-row small { color: var(--muted); font-size: 12px; }
-.remove-guest { flex: 0 0 auto; border: 0; background: none; color: var(--highlight); font: inherit; font-size: 13px; cursor: pointer; }
-.remove-guest:disabled { color: var(--muted); cursor: wait; }
+.guest-list-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.edit-guest, .remove-guest, .cancel-edit-guest { border: 0; background: none; font: inherit; font-size: 13px; cursor: pointer; }
+.edit-guest { color: var(--accent-deep); }
+.remove-guest { color: var(--highlight); }
+.edit-guest:disabled, .remove-guest:disabled, .cancel-edit-guest:disabled { color: var(--muted); cursor: wait; }
+.guest-edit-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; width: 100%; }
+.guest-edit-form input { min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--bg); color: var(--ink); font: inherit; font-size: 14px; }
+.guest-edit-form button { border: 1px solid var(--accent-deep); border-radius: 7px; background: var(--accent-deep);
+  color: #fff; padding: 6px 8px; font: inherit; font-size: 13px; cursor: pointer; }
+.guest-edit-form .cancel-edit-guest { border-color: var(--line); background: #fff; color: var(--ink); }
+.guest-edit-form button:disabled { opacity: 0.65; cursor: wait; }
 .guest-list-empty { color: var(--muted); padding: 12px 2px; font-size: 14px; }
 .panel { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 2px solid var(--line);
   padding: 12px 16px 20px; z-index: 50; box-shadow: 0 -4px 16px rgba(60, 74, 62, 0.14); }

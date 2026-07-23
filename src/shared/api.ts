@@ -32,6 +32,11 @@ export const addGuest = async (nameEn: string, nameZh: string): Promise<string> 
 export const removeGuest = async (guestId: string): Promise<void> => {
   unwrap(await supabase.rpc('remove_guest', { p_guest_id: guestId }));
 };
+export const updateGuestName = async (guestId: string, nameEn: string, nameZh: string): Promise<void> => {
+  unwrap(await supabase.rpc('update_guest_name', {
+    p_guest_id: guestId, p_name_en: nameEn, p_name_zh: nameZh,
+  }));
+};
 export const unseatAll = async (): Promise<number> =>
   unwrap(await supabase.rpc('unseat_all', {}));
 export const rotateTable = async (tableNo: number): Promise<void> => {

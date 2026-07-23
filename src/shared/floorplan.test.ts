@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { labelFontSize, mountFloorplan, zoomCappedLabelFontSize } from './floorplan';
+import { labelFontSize, mountFloorplan, shouldHideTableLabels, zoomCappedLabelFontSize } from './floorplan';
 import type { SeatMap } from './types';
 
 describe('labelFontSize', () => {
@@ -23,6 +23,11 @@ it('caps host label growth after the fitted zoom level', () => {
   expect(zoomCappedLabelFontSize(24, 1)).toBeCloseTo(24, 8);
   expect(zoomCappedLabelFontSize(24, 4)).toBeCloseTo(8.1, 1);
   expect(zoomCappedLabelFontSize(24, 0.8)).toBeCloseTo(24, 8);
+});
+
+it('hides guest table labels once the map is zoomed in for seat finding', () => {
+  expect(shouldHideTableLabels(1.6)).toBe(false);
+  expect(shouldHideTableLabels(1.61)).toBe(true);
 });
 
 const svgText = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">

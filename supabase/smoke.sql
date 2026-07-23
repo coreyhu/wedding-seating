@@ -62,8 +62,14 @@ declare added uuid;
 begin
   added := add_guest('Manual Guest', '手动宾客');
   assert (select count(*) from guests where id = added) = 1, 'manual add creates a guest';
+  perform assign_seat(added, 1, 1);
+  perform update_guest_name(added, 'Renamed Guest', '改名宾客');
+  assert (select name_en from guests where id = added) = 'Renamed Guest', 'manual edit updates English name';
+  assert (select name_zh from guests where id = added) = '改名宾客', 'manual edit updates Chinese name';
+  assert (select table_no from guests where id = added) = 1
+    and (select seat_no from guests where id = added) = 1, 'manual edit keeps seat assignment';
   begin
-    perform add_guest('Manual Guest', '手动宾客');
+    perform add_guest('Renamed Guest', '改名宾客');
     raise exception 'duplicate guest was accepted';
   exception when raise_exception then
     if sqlerrm <> 'Guest already exists' then raise; end if;
@@ -108,6 +114,12 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'not authorized' then raise; end if;
   end;
+  begin
+    perform update_guest_name(a, 'Unauthorized Guest', '');
+    raise exception 'non-admin wrote via update_guest_name — is_admin gate broken';
+  exception when raise_exception then
+    if sqlerrm <> 'not authorized' then raise; end if;
+  end;
   -- restore the admin sub for any later checks
   perform set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111"}', true);
 end $$;
@@ -147,12 +159,16 @@ begin
     'anon cannot execute add_guest';
   assert not has_function_privilege('anon', 'remove_guest(uuid)', 'execute'),
     'anon cannot execute remove_guest';
+  assert not has_function_privilege('anon', 'update_guest_name(uuid,text,text)', 'execute'),
+    'anon cannot execute update_guest_name';
   assert has_function_privilege('authenticated', 'assign_seat(uuid,int,int)', 'execute'),
     'authenticated can execute assign_seat';
   assert has_function_privilege('authenticated', 'add_guest(text,text)', 'execute'),
     'authenticated can execute add_guest';
   assert has_function_privilege('authenticated', 'remove_guest(uuid)', 'execute'),
     'authenticated can execute remove_guest';
+  assert has_function_privilege('authenticated', 'update_guest_name(uuid,text,text)', 'execute'),
+    'authenticated can execute update_guest_name';
 end $$;
 
 -- anon must not read guests directly
