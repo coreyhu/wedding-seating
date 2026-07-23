@@ -22,6 +22,7 @@ it('taglines: five amenities carry bilingual taglines, ceremony/restroom do not'
 describe('matchAmenity', () => {
   it('matches exact names and keywords in both scripts', () => {
     expect(matchAmenity(prepareQuery('Bar'))?.id).toBe('bar');
+    expect(matchAmenity(prepareQuery('现场画家'))?.id).toBe('guest_artist');
     expect(matchAmenity(prepareQuery('bathroom'))?.id).toBe('restroom');
     expect(matchAmenity(prepareQuery('洗手间'))?.id).toBe('restroom');
     expect(matchAmenity(prepareQuery('厕所'))?.id).toBe('restroom');

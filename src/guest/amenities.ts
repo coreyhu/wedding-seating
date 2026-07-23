@@ -34,8 +34,8 @@ export const AMENITIES: Amenity[] = [
   {
     id: 'guest_artist',
     emoji: '🎨',
-    name: { en: 'Live Artist', zh: '现场创作' },
-    keywords: { en: ['live artist', 'artist'], zh: ['现场创作', '画家'] },
+    name: { en: 'Live Artist', zh: '现场画家' },
+    keywords: { en: ['live artist', 'artist'], zh: ['现场画家', '现场创作', '画家'] },
     tagline: { en: 'Have your portrait painted by our guest artist', zh: '让我们的驻场艺术家为您绘制肖像' },
   },
   {
