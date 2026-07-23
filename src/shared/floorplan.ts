@@ -35,15 +35,24 @@ const escapeId = (key: string): string =>
 // size regardless of which Affinity export we're on (the v3 botanical map is
 // ~2× the coordinate space of v2 — a fixed 9-unit font rendered at ~3.5px),
 // scale the font to the viewBox width. Divisors tuned so a seat name reads
-// ~12px on a ~1600px-wide host window and grows as you pinch-zoom in.
-const LABEL_DIVISORS = { seat: 200, table: 130, landmark: 150 } as const;
+// ~12px on a ~1600px-wide host window.
+const LABEL_DIVISORS = { seat: 150, table: 110, landmark: 125 } as const;
 export function labelFontSize(viewBoxWidth: number, kind: keyof typeof LABEL_DIVISORS): number {
   const w = viewBoxWidth > 0 ? viewBoxWidth : 1000;
   return Math.round((w / LABEL_DIVISORS[kind]) * 10) / 10;
 }
 
+// Labels can live inside the map's zoomed SVG group, so they normally grow
+// along with the floorplan. The host view caps that growth: once zoomed past
+// the fitted view, divide the SVG font size by the zoom level so the rendered
+// text stays legible without colliding with adjacent guest names.
+export function zoomCappedLabelFontSize(baseSize: number, zoom: number): number {
+  const maxScreenScale = 1.35;
+  return (baseSize * maxScreenScale) / Math.max(maxScreenScale, zoom);
+}
+
 export function mountFloorplan(container: HTMLElement,
-  opts: { panZoom?: boolean; svgText?: string; seatMap?: SeatMap } = {}): Floorplan {
+  opts: { panZoom?: boolean; svgText?: string; seatMap?: SeatMap; capLabelZoom?: boolean } = {}): Floorplan {
   const seatMap = opts.seatMap ?? (generatedMap as SeatMap);
   container.innerHTML = opts.svgText ?? generatedSvg;
   const svg = container.querySelector('svg') as SVGSVGElement;
@@ -51,14 +60,45 @@ export function mountFloorplan(container: HTMLElement,
   svg.classList.add('floorplan');
   const vbW = Number(seatMap.viewBox.split(/\s+/)[2]) || 1000;
   const fontFor = (kind: 'seat' | 'table' | 'landmark') => labelFontSize(vbW, kind);
+  // The source SVG's table centre and the generated seat map can occasionally
+  // disagree (the export's path centre versus its inferred bounding box). The
+  // eight chair centres are the coordinates we actually render, so their
+  // average is the most reliable visual centre for both labels and table zoom.
+  const tableCenter = (tableNo: number): { cx: number; cy: number } | null => {
+    const fallback = seatMap.tables[String(tableNo)];
+    if (!fallback) return null;
+    const chairs = Object.entries(seatMap.seats)
+      .filter(([key]) => key.startsWith(`${tableNo}-`))
+      .map(([, seat]) => seat);
+    if (chairs.length !== 8) return fallback;
+    return {
+      cx: chairs.reduce((sum, seat) => sum + seat.cx, 0) / chairs.length,
+      cy: chairs.reduce((sum, seat) => sum + seat.cy, 0) / chairs.length,
+    };
+  };
+  let labelZoom = 1;
+  const updateLabelSizes = (zoom: number): void => {
+    labelZoom = zoom;
+    if (!opts.capLabelZoom) return;
+    svg.querySelectorAll<SVGTextElement>('[data-base-label-font]').forEach(el => {
+      const baseFont = Number(el.dataset.baseLabelFont);
+      if (!baseFont) return;
+      const font = zoomCappedLabelFontSize(baseFont, zoom);
+      el.setAttribute('font-size', String(font));
+      el.setAttribute('stroke-width', String(font * 0.18));
+    });
+  };
   // A white halo (paint-order: stroke under the fill) keeps labels legible
   // over the map's varied colours. Halo width scales with the font.
   const makeLabel = (cssClass: string, x: number, y: number, font: number, text: string): void => {
     const el = document.createElementNS(SVG_NS, 'text');
     el.setAttribute('x', String(x)); el.setAttribute('y', String(y));
-    el.setAttribute('font-size', String(font));
-    el.setAttribute('stroke', '#ffffff'); el.setAttribute('stroke-width', String(font * 0.18));
+    el.dataset.baseLabelFont = String(font);
+    const effectiveFont = opts.capLabelZoom ? zoomCappedLabelFontSize(font, labelZoom) : font;
+    el.setAttribute('font-size', String(effectiveFont));
+    el.setAttribute('stroke', '#ffffff'); el.setAttribute('stroke-width', String(effectiveFont * 0.18));
     el.setAttribute('paint-order', 'stroke'); el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('dominant-baseline', 'middle');
     el.setAttribute('class', cssClass);
     el.textContent = text;
     // Append INSIDE svg-pan-zoom's viewport group so labels share the map's
@@ -72,6 +112,7 @@ export function mountFloorplan(container: HTMLElement,
   const pz = opts.panZoom !== false
     ? svgPanZoom(svg, {
         minZoom: 0.8, maxZoom: 12, zoomScaleSensitivity: 0.35, dblClickZoomEnabled: false,
+        onZoom: updateLabelSizes,
         // svg-pan-zoom binds its OWN touch handlers, and its pan logic rebuilds
         // the CTM from a touchstart-time snapshot on every touchmove
         // (handleMouseMove → firstEventCTM.translate) — stomping any zoom our
@@ -245,15 +286,8 @@ export function mountFloorplan(container: HTMLElement,
     setOccupied(key, occupied) { seatEl(key)?.classList.toggle('occupied', occupied); },
     addSeatLabel(key, text) {
       const seat = seatMap.seats[key]; if (!seat) return;
-      const table = seatMap.tables[key.split('-')[0]!];
       const font = fontFor('seat');
-      let { cx, cy } = seat;
-      if (table) { // push label outward past the chair, scaled to the font
-        const d = Math.hypot(cx - table.cx, cy - table.cy) || 1;
-        const push = font * 1.1;
-        cx += ((cx - table.cx) / d) * push; cy += ((cy - table.cy) / d) * push;
-      }
-      makeLabel('seat-label', cx, cy, font, text);
+      makeLabel('seat-label', seat.cx, seat.cy, font, text);
     },
     clearSeatLabels() { svg.querySelectorAll('.seat-label').forEach(e => e.remove()); },
     zoomToSeat(key) {
@@ -261,7 +295,7 @@ export function mountFloorplan(container: HTMLElement,
       if (seat) zoomToPoint(seat.cx, seat.cy);
     },
     zoomToTable(tableNo) {
-      const table = seatMap.tables[String(tableNo)];
+      const table = tableCenter(tableNo);
       if (table) zoomToPoint(table.cx, table.cy);
     },
     zoomToPoint(cx, cy) { zoomToPoint(cx, cy); },
@@ -282,9 +316,12 @@ export function mountFloorplan(container: HTMLElement,
       svg.querySelectorAll('.table-label').forEach(e => e.remove());
       const font = fontFor('table');
       for (const [no, text] of Object.entries(labels)) {
-        const tb = seatMap.tables[no];
+        const tb = tableCenter(Number(no));
         if (!tb || !text) continue;
-        makeLabel('table-label', tb.cx, tb.cy - tb.r - font * 0.6, font, text);
+        // Keep the table name centered in the visual ring of chairs, rather
+        // than trusting a table-path coordinate that may be offset in an SVG
+        // export.
+        makeLabel('table-label', tb.cx, tb.cy, font, text);
       }
     },
     setLandmarkLabels(labels) {

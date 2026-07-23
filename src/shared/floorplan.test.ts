@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { labelFontSize, mountFloorplan } from './floorplan';
+import { labelFontSize, mountFloorplan, zoomCappedLabelFontSize } from './floorplan';
 import type { SeatMap } from './types';
 
 describe('labelFontSize', () => {
@@ -7,7 +7,7 @@ describe('labelFontSize', () => {
     // v3 map (~4850 wide) must yield a much larger unit font than the old
     // ~2283-wide map — the fixed 9-unit font that rendered at ~3.5px is the bug.
     expect(labelFontSize(4850, 'seat')).toBeGreaterThan(20);
-    expect(labelFontSize(4850, 'seat')).toBeCloseTo(24.3, 0);
+    expect(labelFontSize(4850, 'seat')).toBeCloseTo(32.3, 0);
     // bigger coordinate space → bigger unit font, proportionally
     expect(labelFontSize(4850, 'seat')).toBeGreaterThan(labelFontSize(2283, 'seat'));
     // table names are larger than seat names; landmarks in between
@@ -19,13 +19,26 @@ describe('labelFontSize', () => {
   });
 });
 
+it('caps host label growth after the fitted zoom level', () => {
+  expect(zoomCappedLabelFontSize(24, 1)).toBeCloseTo(24, 8);
+  expect(zoomCappedLabelFontSize(24, 4)).toBeCloseTo(8.1, 1);
+  expect(zoomCappedLabelFontSize(24, 0.8)).toBeCloseTo(24, 8);
+});
+
 const svgText = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <g id="table-1"><path id="table-1-shape" d="M40 40 h20 v20 h-20 z"/>
   <path id="seat-1-1" class="seat" d="M45 20 h10 v10 h-10 z"/>
   <path id="seat-1-2" class="seat" d="M70 45 h10 v10 h-10 z"/></g></svg>`;
 const seatMap: SeatMap = { viewBox: '0 0 100 100',
-  tables: { '1': { cx: 50, cy: 50, r: 10 } },
-  seats: { '1-1': { cx: 50, cy: 25 }, '1-2': { cx: 75, cy: 50 } },
+  // Deliberately offset: table labels should use the centre of all eight
+  // rendered chairs, which is what users see on the floorplan.
+  tables: { '1': { cx: 42, cy: 43, r: 10 } },
+  seats: {
+    '1-1': { cx: 50, cy: 25 }, '1-2': { cx: 75, cy: 50 },
+    '1-3': { cx: 50, cy: 75 }, '1-4': { cx: 25, cy: 50 },
+    '1-5': { cx: 32, cy: 32 }, '1-6': { cx: 68, cy: 32 },
+    '1-7': { cx: 68, cy: 68 }, '1-8': { cx: 32, cy: 68 },
+  },
   landmarks: { sweetheart_table: { cx: 10, cy: 10 } } };
 
 let container: HTMLElement;
@@ -52,7 +65,7 @@ it('occupied toggling and labels', () => {
   fp.addSeatLabel('1-1', 'Carol Zhao');
   const label = container.querySelector('text.seat-label')!;
   expect(label.textContent).toBe('Carol Zhao');
-  expect(Number(label.getAttribute('y'))).toBeLessThan(25); // pushed outward, away from table center
+  expect(Number(label.getAttribute('y'))).toBe(25); // centered on the occupied chair
   fp.clearSeatLabels();
   expect(container.querySelectorAll('.seat-label')).toHaveLength(0);
 });
@@ -77,14 +90,15 @@ it('zoom helpers are safe no-ops without panZoom', () => {
     fp.zoomToTable(1); fp.zoomToTable(99); fp.zoomToPoint(1, 2);
   }).not.toThrow();
 });
-it('setTableLabels draws above the table and replaces on re-call', () => {
+it('setTableLabels draws inside the table and replaces on re-call', () => {
   const fp = mount();
   fp.setTableLabels({ 1: 'Fern' });
   fp.setTableLabels({ 1: '蕨' });
   const els = container.querySelectorAll('.table-label');
   expect(els).toHaveLength(1);
   expect(els[0]!.textContent).toBe('蕨');
-  expect(Number(els[0]!.getAttribute('y'))).toBeLessThan(40); // cy 50 - r 10 - 6
+  expect(Number(els[0]!.getAttribute('x'))).toBe(50);
+  expect(Number(els[0]!.getAttribute('y'))).toBe(50); // centered on the table
 });
 it('animated zoomToPoint stays a safe no-op without panZoom and cancels cleanly', () => {
   const fp = mount();

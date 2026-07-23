@@ -263,7 +263,7 @@ function wireUnseatAll(): void {
 }
 
 requireAuth(() => {
-  fp = mountFloorplan(document.querySelector('#map')!);
+  fp = mountFloorplan(document.querySelector('#map')!, { capLabelZoom: true });
   fp.onTap(hit => {
     if (swapSource !== null) {                 // picking a table to swap with
       if (hit.kind === 'table') void doTableSwap(hit.tableNo);
