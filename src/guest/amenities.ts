@@ -23,7 +23,7 @@ export const AMENITIES: Amenity[] = [
     emoji: '💌',
     name: { en: 'Welcome Table', zh: '迎宾台' },
     keywords: { en: ['welcome table', 'welcome'], zh: ['迎宾台', '签到'] },
-    tagline: { en: 'Get your photo taken and sign the guest book', zh: '拍张合影，在留言簿上签名留言' },
+    tagline: { en: 'Leave a note in our guest book!', zh: '请在留言簿上签名留念' },
   },
   {
     id: 'ceremony_seating',
@@ -36,7 +36,7 @@ export const AMENITIES: Amenity[] = [
     emoji: '🎨',
     name: { en: 'Live Artist', zh: '现场创作' },
     keywords: { en: ['live artist', 'artist'], zh: ['现场创作', '画家'] },
-    tagline: { en: 'Get painted live by our guest artist', zh: '让驻场艺术家为您现场作画' },
+    tagline: { en: 'Have your portrait painted by our guest artist', zh: '让我们的驻场艺术家为您绘制肖像' },
   },
   {
     id: 'restroom',
@@ -59,7 +59,7 @@ export const AMENITIES: Amenity[] = [
     emoji: '🎧',
     name: { en: 'DJ', zh: 'DJ台' },
     keywords: { en: ['dj', 'music'], zh: ['DJ台', '音乐'] },
-    tagline: { en: 'Taking requests all night', zh: '全程欢迎点歌' },
+    tagline: { en: 'Leave a song request with the DJ', zh: '向 DJ 点一首歌' },
   },
 ];
 
