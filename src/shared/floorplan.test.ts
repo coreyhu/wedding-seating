@@ -117,6 +117,18 @@ it('setLandmarkLabels draws at landmark coords and replaces on re-call', () => {
   expect(els).toHaveLength(1);
   expect(els[0]!.textContent).toBe('酒吧');
 });
+it('keeps table and landmark labels readable when the map is narrow', () => {
+  const fp = mountFloorplan(container, {
+    panZoom: false, svgText, seatMap, minimumMapLabelFontPx: 12,
+  });
+  Object.defineProperty(fp.svg, 'getBoundingClientRect', {
+    value: () => ({ width: 50 }) as DOMRect,
+  });
+  fp.setTableLabels({ 1: 'Fern' });
+  fp.setLandmarkLabels({ sweetheart_table: 'Bar' });
+  expect(Number(container.querySelector('.table-label')!.getAttribute('font-size'))).toBe(24);
+  expect(Number(container.querySelector('.landmark-label')!.getAttribute('font-size'))).toBe(24);
+});
 it('mounting without panZoom attaches no gesture handlers that throw on pointer events', () => {
   const fp = mount();
   expect(() => {

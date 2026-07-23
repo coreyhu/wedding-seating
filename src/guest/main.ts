@@ -12,6 +12,7 @@ import { tablemateRows } from './tablemates';
 
 const fp = mountFloorplan(document.querySelector('#map')!, {
   capLabelZoom: true,
+  minimumMapLabelFontPx: 11,
   // Once a guest has zoomed in to find their chair, the table name no longer
   // helps navigation and can obscure the seat ring.
   hideTableLabelsOnZoom: true,
