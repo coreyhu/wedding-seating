@@ -82,6 +82,15 @@ const mapBox = await page.locator('#map').boundingBox();
 const vp = page.viewportSize();
 check('layout: map fills the viewport', mapBox.width >= vp.width - 2 && mapBox.height >= vp.height - 2);
 
+// Tapping a table opens its complete seated roster, without needing to search
+// for one of its guests first.
+await page.locator('svg [id="table-1-shape"]').click({ force: true });
+await page.waitForFunction(() => !document.querySelector('#banner').hidden &&
+  document.querySelector('#banner').textContent.includes('Carol Zhao'), null, { timeout: 5000 });
+const tableRoster = await page.textContent('#banner');
+check('guest: table tap shows the full table roster', /Carol Zhao/.test(tableRoster) && /Kevin Hu/.test(tableRoster),
+  tableRoster.trim().slice(0, 80));
+
 // ---------- MOBILE GESTURES ----------
 // CDP Input.synthesizePinchGesture drives real touch-event synthesis in chromium;
 // exercises the hand-rolled pinch handler in floorplan.ts (svg-pan-zoom has no touch support).
@@ -155,6 +164,13 @@ const occupiedBefore = await page.locator('svg .seat.occupied').count();
 const labels = await page.locator('svg .seat-label').count();
 check('host: occupied chairs color-coded with labels', occupiedBefore >= 6 && labels === occupiedBefore, `occupied=${occupiedBefore} labels=${labels}`);
 const unseatedBefore = Number(await page.textContent('#unseated-count'));
+
+await page.locator('svg [id="table-1-shape"]').click({ force: true });
+await page.waitForSelector('#panel:not([hidden])');
+const hostTableRoster = await page.textContent('#panel');
+check('host: table tap shows its full roster', /Carol Zhao/.test(hostTableRoster) && /Kevin Hu/.test(hostTableRoster),
+  hostTableRoster.trim().slice(0, 80));
+await page.locator('#panel button', { hasText: 'Close' }).click();
 
 // assign: click empty seat 5-1 -> pick first unseated guest
 await page.locator('svg [id="seat-5-1"]').click({ force: true });
@@ -254,7 +270,7 @@ const MATRIX = ['Table 1 / 1号桌,Table 2 / 2号桌,Table 3 / 3号桌,Table 4 /
   'Eric Dang / 邓艾瑞,,,,,,,,,,,',
   'James Dang / 邓杰姆斯,,,,,,,,,,,'].join('\n');
 await page.click('#import-box summary');
-await page.fill('#csv', MATRIX);
+await page.setInputFiles('#csv-file', { name: 'seating-list.csv', mimeType: 'text/csv', buffer: Buffer.from(MATRIX) });
 await page.waitForSelector('#csv-go:not([disabled])');
 await page.click('#csv-go');
 await page.waitForSelector('.toast', { timeout: 8000 });

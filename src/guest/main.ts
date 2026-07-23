@@ -1,9 +1,9 @@
 import '@fontsource/fraunces/600.css';
-import { searchGuests, listTables, tableGuests } from '../shared/api';
+import { searchGuests, listTables, tableGuests, tableGuestsByTable } from '../shared/api';
 import { mountFloorplan } from '../shared/floorplan';
 import { dismissToast, toast } from '../shared/toast';
 import { prepareQuery, rankMatches } from '../logic/search';
-import { seatKey, type GuestMatch, type TableInfo, type Tablemate } from '../shared/types';
+import { seatKey, type GuestMatch, type TableGuest, type TableInfo, type Tablemate } from '../shared/types';
 import { detectLocale, getLocale, onLocaleChange, pickLabel, seatText, setLocale, t } from './i18n';
 import { burstPetals } from './effects';
 import { COUPLE, matchesCouple } from './couple';
@@ -24,9 +24,17 @@ let lastShown: GuestMatch | null = null;
 let lastTablemates: Tablemate[] | null = null;
 let tablematesGen = 0;
 let lastAmenity: Amenity | null = null;
+let selectedTableNo: number | null = null;
+let lastTableGuests: TableGuest[] | null = null;
+let lastTableGuestsTableNo: number | null = null;
+let tableGuestsGen = 0;
 
 const displayName = (g: { name_en: string; name_zh: string }) => [g.name_en, g.name_zh].filter(Boolean).join(' · ');
 const tableLabel = (g: GuestMatch) => pickLabel(g.label_en, g.label_zh);
+const tableLabelByNo = (tableNo: number) => {
+  const table = tables.find(t => t.table_no === tableNo);
+  return table ? pickLabel(table.label_en, table.label_zh) : (getLocale() === 'zh' ? `${tableNo}号桌` : `Table ${tableNo}`);
+};
 
 function renderStatics(): void {
   document.querySelector('.topbar h1')!.lastChild!.textContent = t('title');
@@ -71,6 +79,8 @@ function renderLandmarkLabels(): void {
 function showGuest(g: GuestMatch, opts: { resurface?: boolean } = {}): void {
   lastShown = g;
   lastAmenity = null;
+  selectedTableNo = null;
+  tableGuestsGen++;
   results.replaceChildren();
   banner.className = 'banner';
   banner.hidden = false;
@@ -137,6 +147,8 @@ function showAmenity(a: Amenity, opts: { resurface?: boolean } = {}): void {
   lastShown = null;
   lastMatches = null;
   lastAmenity = a;
+  selectedTableNo = null;
+  tableGuestsGen++;
   results.replaceChildren();
   banner.className = 'banner';
   banner.hidden = false;
@@ -156,6 +168,8 @@ function renderResults(matches: GuestMatch[]): void {
   lastMatches = matches;
   lastShown = null;
   lastAmenity = null;
+  selectedTableNo = null;
+  tableGuestsGen++;
   banner.className = 'banner';
   banner.hidden = true;
   results.replaceChildren();
@@ -180,6 +194,66 @@ function renderResults(matches: GuestMatch[]): void {
   if (matches.length === 1) showGuest(matches[0]!);
 }
 
+function renderTableGuests(tableNo: number, rows: TableGuest[] | null | undefined): void {
+  banner.className = 'banner table-guests';
+  banner.hidden = false;
+  const title = document.createElement('strong');
+  title.textContent = tableLabelByNo(tableNo);
+  const subtitle = document.createElement('small');
+  subtitle.textContent = rows === null ? `${t('tableGuests')} · ${t('loading')}` : t('tableGuests');
+  banner.replaceChildren(title, document.createElement('br'), subtitle);
+  if (rows === null) return;
+  if (rows === undefined) {
+    const error = document.createElement('p');
+    error.className = 'table-guests-empty';
+    error.textContent = t('connectionTrouble');
+    banner.append(error);
+    return;
+  }
+  if (rows.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'table-guests-empty';
+    empty.textContent = t('noTableGuests');
+    banner.append(empty);
+    return;
+  }
+  const ul = document.createElement('ul');
+  for (const guest of rows) {
+    const item = document.createElement('li');
+    item.textContent = displayName(guest);
+    ul.append(item);
+  }
+  banner.append(ul);
+}
+
+function showTable(tableNo: number, opts: { resurface?: boolean } = {}): void {
+  lastShown = null;
+  lastMatches = null;
+  lastAmenity = null;
+  results.replaceChildren();
+  selectedTableNo = tableNo;
+  fp.highlight(null);
+  fp.zoomToTable(tableNo);
+  const cachedRows = lastTableGuestsTableNo === tableNo ? lastTableGuests : null;
+  renderTableGuests(tableNo, cachedRows);
+  if (cachedRows || opts.resurface) return;
+  const gen = ++tableGuestsGen;
+  void loadTableGuests(tableNo, gen);
+}
+
+async function loadTableGuests(tableNo: number, gen: number): Promise<void> {
+  try {
+    const rows = await tableGuestsByTable(tableNo);
+    if (gen !== tableGuestsGen || selectedTableNo !== tableNo) return;
+    lastTableGuests = rows;
+    lastTableGuestsTableNo = tableNo;
+    renderTableGuests(tableNo, rows);
+  } catch {
+    if (gen !== tableGuestsGen || selectedTableNo !== tableNo) return;
+    renderTableGuests(tableNo, undefined);
+  }
+}
+
 let timer: ReturnType<typeof setTimeout> | undefined;
 let lastRun = () => {};
 input.addEventListener('input', () => {
@@ -187,12 +261,12 @@ input.addEventListener('input', () => {
   timer = setTimeout(() => {
     const p = prepareQuery(input.value);
     if (p.kind === 'too-short') {
-      lastMatches = null; lastShown = null; lastAmenity = null;
+      lastMatches = null; lastShown = null; lastAmenity = null; selectedTableNo = null; tableGuestsGen++;
       results.replaceChildren(); banner.hidden = true; fp.highlight(null);
       return;
     }
     if (matchesCouple(p)) {
-      lastMatches = null; lastShown = null; lastAmenity = null;
+      lastMatches = null; lastShown = null; lastAmenity = null; selectedTableNo = null; tableGuestsGen++;
       results.replaceChildren();
       banner.hidden = false;
       banner.className = 'sweetheart-card';
@@ -228,11 +302,21 @@ onLocaleChange(() => {
   renderStatics();
   if (lastShown) showGuest(lastShown, { resurface: true });
   else if (lastAmenity) showAmenity(lastAmenity, { resurface: true });
+  else if (selectedTableNo !== null) showTable(selectedTableNo, { resurface: true });
   else if (lastMatches) renderResults(lastMatches);
 });
 
 setLocale(detectLocale());
 void (async () => {
-  try { tables = await listTables(); renderTableLabels(); }
+  try {
+    tables = await listTables();
+    renderTableLabels();
+    if (selectedTableNo !== null) renderTableGuests(selectedTableNo,
+      lastTableGuestsTableNo === selectedTableNo ? lastTableGuests : null);
+  }
   catch { /* decorative map labels — spec-documented silent skip */ }
 })();
+
+fp.onTap(hit => {
+  if (hit.kind === 'table') showTable(hit.tableNo);
+});

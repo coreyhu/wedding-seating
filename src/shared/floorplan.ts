@@ -11,6 +11,7 @@ export interface Floorplan {
   addSeatLabel(key: SeatKey, text: string): void;
   clearSeatLabels(): void;
   zoomToSeat(key: SeatKey): void;
+  zoomToTable(tableNo: number): void;
   zoomToPoint(cx: number, cy: number): void;
   zoomToLandmark(id: string): void;
   onTap(cb: (hit: { kind: 'seat'; key: SeatKey } | { kind: 'table'; tableNo: number }) => void): void;
@@ -186,16 +187,39 @@ export function mountFloorplan(container: HTMLElement,
   const zoomToPoint = (cx: number, cy: number): void => {
     if (!pz) return;
     cancelAnimationFrame(zoomAnim);
-    const { width, height, realZoom } = pz.getSizes();
     const startZoom = pz.getZoom();
-    const startPan = pz.getPan();
-    const startCenter = { x: (width / 2 - startPan.x) / realZoom, y: (height / 2 - startPan.y) / realZoom };
     const targetZoom = 5;
+    const viewport = svg.querySelector<SVGGraphicsElement>('.svg-pan-zoom_viewport');
+    const screenCenter = () => {
+      const rect = svg.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    };
+    const pointAtScreenCenter = () => {
+      const ctm = viewport?.getScreenCTM();
+      if (!ctm) return { x: cx, y: cy };
+      const center = screenCenter();
+      const point = svg.createSVGPoint();
+      point.x = center.x; point.y = center.y;
+      return point.matrixTransform(ctm.inverse());
+    };
+    // `getZoom()` is relative to svg-pan-zoom's fitted base transform, not a
+    // screen-pixel scale. Center through the viewport's live screen CTM rather
+    // than multiplying SVG coordinates by that relative value (which sent a
+    // selected table far off-center on the production floorplan).
+    const centerOn = (point: { x: number; y: number }) => {
+      const ctm = viewport?.getScreenCTM();
+      if (!ctm) return;
+      const svgPoint = svg.createSVGPoint();
+      svgPoint.x = point.x; svgPoint.y = point.y;
+      const rendered = svgPoint.matrixTransform(ctm);
+      const center = screenCenter();
+      pz!.panBy({ x: center.x - rendered.x, y: center.y - rendered.y });
+    };
+    const startCenter = pointAtScreenCenter();
     const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     const apply = (z: number, c: { x: number; y: number }) => {
       pz!.zoom(z);
-      const rz = pz!.getSizes().realZoom;
-      pz!.pan({ x: width / 2 - c.x * rz, y: height / 2 - c.y * rz });
+      centerOn(c);
     };
     if (reduced || typeof requestAnimationFrame !== 'function') return apply(targetZoom, { x: cx, y: cy });
     const t0 = performance.now();
@@ -235,6 +259,10 @@ export function mountFloorplan(container: HTMLElement,
     zoomToSeat(key) {
       const seat = seatMap.seats[key];
       if (seat) zoomToPoint(seat.cx, seat.cy);
+    },
+    zoomToTable(tableNo) {
+      const table = seatMap.tables[String(tableNo)];
+      if (table) zoomToPoint(table.cx, table.cy);
     },
     zoomToPoint(cx, cy) { zoomToPoint(cx, cy); },
     zoomToLandmark(id) {

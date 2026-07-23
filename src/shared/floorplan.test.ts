@@ -70,9 +70,12 @@ it('delegates table taps', () => {
   container.querySelector('#table-1-shape')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   expect(cb).toHaveBeenCalledWith({ kind: 'table', tableNo: 1 });
 });
-it('zoomToLandmark and zoomToPoint are safe no-ops without panZoom', () => {
+it('zoom helpers are safe no-ops without panZoom', () => {
   const fp = mount();
-  expect(() => { fp.zoomToLandmark('sweetheart_table'); fp.zoomToLandmark('nope'); fp.zoomToPoint(1, 2); }).not.toThrow();
+  expect(() => {
+    fp.zoomToLandmark('sweetheart_table'); fp.zoomToLandmark('nope');
+    fp.zoomToTable(1); fp.zoomToTable(99); fp.zoomToPoint(1, 2);
+  }).not.toThrow();
 });
 it('setTableLabels draws above the table and replaces on re-call', () => {
   const fp = mount();

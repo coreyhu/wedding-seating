@@ -3,6 +3,7 @@ import { assignSeat, listGuests, listTables, rotateTable, setTableLabel, swapTab
 import { mountFloorplan, type Floorplan } from '../shared/floorplan';
 import { toast } from '../shared/toast';
 import { requireAuth } from './auth';
+import { mountGuestList } from './guest-list';
 import { mountImport } from './import';
 import * as sm from '../logic/seat-actions';
 import { seatKey, type Guest, type SeatKey, type TableInfo } from '../shared/types';
@@ -140,6 +141,7 @@ function step(s: sm.Step): void {
 function openTableEditor(tableNo: number): void {
   mode = sm.idle;             // closes any open seat panel state
   renderMode();               // hides panel, clears highlight
+  fp.zoomToTable(tableNo);
   const tb = tables.find(x => x.table_no === tableNo);
   const p = panel();
   p.hidden = false;
@@ -148,6 +150,26 @@ function openTableEditor(tableNo: number): void {
   const strong = document.createElement('strong');
   strong.textContent = `Table ${tableNo} name`;
   title.append(strong);
+  const seatedGuests = guests
+    .filter(g => g.table_no === tableNo)
+    .sort((a, b) => (a.seat_no ?? 0) - (b.seat_no ?? 0));
+  const rosterTitle = document.createElement('p');
+  rosterTitle.className = 'table-roster-title';
+  rosterTitle.textContent = `Guests at this table (${seatedGuests.length})`;
+  const roster = document.createElement('ul');
+  roster.className = 'table-roster';
+  if (seatedGuests.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'table-roster-empty';
+    empty.textContent = 'No guests seated here yet';
+    roster.append(empty);
+  } else {
+    for (const guest of seatedGuests) {
+      const item = document.createElement('li');
+      item.textContent = nameOf(guest);
+      roster.append(item);
+    }
+  }
   const en = document.createElement('input');
   en.placeholder = 'English name (empty = default)';
   en.value = tb && tb.label_en !== `Table ${tableNo}` ? tb.label_en : '';
@@ -180,7 +202,7 @@ function openTableEditor(tableNo: number): void {
   swap.textContent = 'Swap with table…';
   swap.onclick = () => beginTableSwap(tableNo);
 
-  p.append(title, en, zh, document.createElement('br'), save, close,
+  p.append(title, rosterTitle, roster, en, zh, document.createElement('br'), save, close,
     document.createElement('br'), rotate, swap);
 }
 
@@ -250,6 +272,7 @@ requireAuth(() => {
     if (hit.kind === 'seat') return step(sm.tapSeat(mode, hit.key, bySeat.get(hit.key)?.id ?? null));
     if (mode.kind !== 'picking-dest') openTableEditor(hit.tableNo);
   });
+  mountGuestList(document.querySelector('#guest-list')!, refresh);
   mountImport(document.querySelector('#import')!, refresh);
   wireUnseatAll();
   document.querySelector('#roster-filter')?.addEventListener('input', renderRoster);

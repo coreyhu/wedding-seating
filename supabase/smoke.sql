@@ -57,6 +57,21 @@ begin
   assert (select count(*) from guests) = 2, 'only the two payload guests remain';
 end $$;
 
+do $$
+declare added uuid;
+begin
+  added := add_guest('Manual Guest', '手动宾客');
+  assert (select count(*) from guests where id = added) = 1, 'manual add creates a guest';
+  begin
+    perform add_guest('Manual Guest', '手动宾客');
+    raise exception 'duplicate guest was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'Guest already exists' then raise; end if;
+  end;
+  perform remove_guest(added);
+  assert (select count(*) from guests where id = added) = 0, 'manual remove deletes a guest';
+end $$;
+
 -- an authenticated user who is NOT in admins must not be able to write
 do $$
 declare a uuid;
@@ -78,6 +93,18 @@ begin
   begin
     perform import_seating(jsonb_build_object('tables', '[]'::jsonb, 'guests', '[]'::jsonb));
     raise exception 'non-admin wrote via import_seating — is_admin gate broken';
+  exception when raise_exception then
+    if sqlerrm <> 'not authorized' then raise; end if;
+  end;
+  begin
+    perform add_guest('Unauthorized Guest', '');
+    raise exception 'non-admin wrote via add_guest — is_admin gate broken';
+  exception when raise_exception then
+    if sqlerrm <> 'not authorized' then raise; end if;
+  end;
+  begin
+    perform remove_guest(a);
+    raise exception 'non-admin wrote via remove_guest — is_admin gate broken';
   exception when raise_exception then
     if sqlerrm <> 'not authorized' then raise; end if;
   end;
@@ -116,8 +143,16 @@ begin
     'anon cannot execute unseat';
   assert not has_function_privilege('anon', 'import_seating(jsonb)', 'execute'),
     'anon cannot execute import_seating';
+  assert not has_function_privilege('anon', 'add_guest(text,text)', 'execute'),
+    'anon cannot execute add_guest';
+  assert not has_function_privilege('anon', 'remove_guest(uuid)', 'execute'),
+    'anon cannot execute remove_guest';
   assert has_function_privilege('authenticated', 'assign_seat(uuid,int,int)', 'execute'),
     'authenticated can execute assign_seat';
+  assert has_function_privilege('authenticated', 'add_guest(text,text)', 'execute'),
+    'authenticated can execute add_guest';
+  assert has_function_privilege('authenticated', 'remove_guest(uuid)', 'execute'),
+    'authenticated can execute remove_guest';
 end $$;
 
 -- anon must not read guests directly

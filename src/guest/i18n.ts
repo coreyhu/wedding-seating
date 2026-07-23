@@ -11,6 +11,9 @@ const STRINGS = {
   credits: { en: 'Made with ♥ by Lindsey Tam & Corey Hu', zh: 'Lindsey Tam 与 Corey Hu 用 ♥ 制作' },
   atYourTable: { en: 'At your table', zh: '同桌宾客' },
   you: { en: 'You', zh: '您' },
+  tableGuests: { en: 'Guests at this table', zh: '本桌宾客' },
+  noTableGuests: { en: 'No guests seated here yet', zh: '本桌尚未安排宾客' },
+  loading: { en: 'Loading…', zh: '加载中…' },
 } as const;
 export type StringKey = keyof typeof STRINGS;
 

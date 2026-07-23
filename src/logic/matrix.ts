@@ -1,6 +1,15 @@
 export interface MatrixTable { table_no: number; label_en: string; label_zh: string }
-export interface MatrixGuest { name_en: string; name_zh: string; table_no: number; seat_no: number }
+export interface MatrixGuest { name_en: string; name_zh: string; table_no: number | null; seat_no: number | null }
 export interface MatrixResult { tables: MatrixTable[]; guests: MatrixGuest[]; errors: string[] }
+
+// Exported sheets reserve empty chairs with this marker and put unseated guests
+// in a 13th column. Plain 12-column sheets retain the original compact import
+// behavior, so existing CSVs remain compatible.
+export const EMPTY_SEAT_MARKER = '—';
+export const UNSEATED_HEADER = 'Unseated / 未安排';
+
+const isUnseatedHeader = (value: string): boolean =>
+  [UNSEATED_HEADER, 'Unseated', '未安排'].includes(value.trim());
 
 const splitName = (cell: string): { en: string; zh: string } => {
   const i = cell.search(/[/／]/);
@@ -13,25 +22,44 @@ export function parseSeatingMatrix(text: string): MatrixResult {
   const errors: string[] = [];
   const header = (rows[0] ?? []).map(c => c.trim());
   while (header.length && header[header.length - 1] === '') header.pop();
-  if (header.length !== 12) errors.push(`expected 12 table-name headers, found ${header.length}`);
+  const hasUnseatedColumn = header.length === 13 && isUnseatedHeader(header[12] ?? '');
+  if (header.length !== 12 && !hasUnseatedColumn) {
+    errors.push(`expected 12 table-name headers (or 12 plus ${UNSEATED_HEADER}), found ${header.length}`);
+  }
   const tables: MatrixTable[] = header.slice(0, 12).map((h, i) => {
     const { en, zh } = splitName(h);
     return { table_no: i + 1, label_en: en, label_zh: zh };
   });
   const guests: MatrixGuest[] = [];
   const seen = new Map<string, string>(); // identity -> first location
+  const seatCounts = Array<number>(12).fill(0);
   for (let r = 1; r < rows.length; r++) {
     for (let c = 0; c < Math.min(rows[r]!.length, 12); c++) {
       const cell = rows[r]![c]!.trim();
+      if (cell === EMPTY_SEAT_MARKER) {
+        seatCounts[c]!++;
+        if (seatCounts[c]! > 8) errors.push(`${tables[c]?.label_en || `column ${c + 1}`} has more than 8 seats`);
+        continue;
+      }
       if (!cell || cell === '/') continue;
       const { en, zh } = splitName(cell);
       if (!en && !zh) continue;
-      const seat_no = guests.filter(g => g.table_no === c + 1).length + 1;
+      const seat_no = ++seatCounts[c]!;
       if (seat_no > 8) { errors.push(`${tables[c]?.label_en || `column ${c + 1}`} has more than 8 guests`); continue; }
       const key = `${en}|${zh}`;
       if (seen.has(key)) errors.push(`duplicate guest "${[en, zh].filter(Boolean).join(' / ')}" (${seen.get(key)} and ${tables[c]?.label_en})`);
       else seen.set(key, tables[c]?.label_en || `column ${c + 1}`);
       guests.push({ name_en: en, name_zh: zh, table_no: c + 1, seat_no });
+    }
+    if (hasUnseatedColumn) {
+      const cell = rows[r]![12]?.trim() ?? '';
+      if (!cell || cell === '/') continue;
+      const { en, zh } = splitName(cell);
+      if (!en && !zh) continue;
+      const key = `${en}|${zh}`;
+      if (seen.has(key)) errors.push(`duplicate guest "${[en, zh].filter(Boolean).join(' / ')}" (${seen.get(key)} and ${UNSEATED_HEADER})`);
+      else seen.set(key, UNSEATED_HEADER);
+      guests.push({ name_en: en, name_zh: zh, table_no: null, seat_no: null });
     }
   }
   return { tables, guests, errors };
@@ -53,7 +81,7 @@ export function remapColumnsToTables(r: MatrixResult, mapping: number[]): Matrix
   return {
     errors: [...r.errors],
     tables: r.tables.map(t => ({ ...t, table_no: to(t.table_no) })),
-    guests: r.guests.map(g => ({ ...g, table_no: to(g.table_no) })),
+    guests: r.guests.map(g => g.table_no == null ? g : { ...g, table_no: to(g.table_no) }),
   };
 }
 

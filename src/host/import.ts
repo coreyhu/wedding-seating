@@ -1,5 +1,6 @@
 import { importSeating, listGuests, listTables } from '../shared/api';
 import { toast } from '../shared/toast';
+import { guestListCsv } from '../logic/guest-export';
 import { parseSeatingMatrix, remapColumnsToTables, defaultMapping, type MatrixGuest, type MatrixTable } from '../logic/matrix';
 import type { Guest, TableInfo } from '../shared/types';
 
@@ -7,22 +8,27 @@ const identity = (g: { name_en: string; name_zh: string }) => `${g.name_en}|${g.
 
 export function mountImport(el: HTMLElement, onDone: () => void): void {
   el.innerHTML = `
-    <p>Paste the whole seating sheet as CSV — row 1 = group names, columns = tables, rows = seats. Then choose which venue table each group sits at.</p>
-    <textarea id="csv" rows="6" placeholder="Peacock / 孔雀,Owl,Kangaroo,..."></textarea>
+    <p>Choose a seating CSV — row 1 = group names, columns = tables, rows = seats. Exported sheets also preserve unseated guests and empty-seat positions. Then choose which venue table each group sits at.</p>
+    <label class="csv-file-picker">Choose CSV file<input id="csv-file" type="file" accept=".csv,text/csv" /></label>
+    <div id="csv-file-name" class="csv-file-name">No file selected</div>
+    <div class="csv-actions"><button id="csv-export" type="button">Export guest list (round-trip CSV)</button></div>
     <ul class="import-errors"></ul>
     <div id="csv-mapping" class="csv-mapping"></div>
     <div id="csv-preview"></div>
     <button id="csv-go" disabled>Import</button>`;
-  const ta = el.querySelector<HTMLTextAreaElement>('#csv')!;
+  const fileInput = el.querySelector<HTMLInputElement>('#csv-file')!;
+  const fileName = el.querySelector<HTMLElement>('#csv-file-name')!;
   const errorsEl = el.querySelector<HTMLUListElement>('.import-errors')!;
   const mappingEl = el.querySelector<HTMLElement>('#csv-mapping')!;
   const preview = el.querySelector<HTMLElement>('#csv-preview')!;
   const go = el.querySelector<HTMLButtonElement>('#csv-go')!;
+  const exportButton = el.querySelector<HTMLButtonElement>('#csv-export')!;
 
   let tables: MatrixTable[] = [];
   let guests: MatrixGuest[] = [];
   let mapping: number[] = [];
   let mappingSig = '';           // signature of the rendered group labels
+  let csvText = '';
 
   let existingPromise: Promise<Guest[]> | null = null;
   const getExisting = (): Promise<Guest[]> => (existingPromise ??= listGuests());
@@ -30,7 +36,50 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
   const getTables = (): Promise<TableInfo[]> => (tablesPromise ??= listTables());
 
   let token = 0;
-  ta.addEventListener('input', () => { void onInput(); });
+  let fileToken = 0;
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    const mine = ++fileToken;
+    if (!file) {
+      csvText = '';
+      fileName.textContent = 'No file selected';
+      errorsEl.replaceChildren(); mappingEl.replaceChildren(); preview.textContent = ''; go.disabled = true;
+      return;
+    }
+    try {
+      const text = await file.text();
+      if (mine !== fileToken) return;
+      csvText = text;
+      fileName.textContent = `Selected: ${file.name}`;
+      void onInput();
+    } catch (error) {
+      if (mine !== fileToken) return;
+      csvText = '';
+      fileName.textContent = 'Could not read that file';
+      errorsEl.replaceChildren(); mappingEl.replaceChildren(); preview.textContent = ''; go.disabled = true;
+      toast(error instanceof Error ? error.message : 'Could not read CSV file');
+    }
+  });
+
+  exportButton.addEventListener('click', async () => {
+    exportButton.disabled = true;
+    try {
+      const [currentGuests, currentTables] = await Promise.all([listGuests(), listTables()]);
+      const file = new Blob([guestListCsv(currentGuests, currentTables)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'seating-list.csv';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not export guest list');
+    } finally {
+      exportButton.disabled = false;
+    }
+  });
 
   // Rebuild the per-group <select>s (only when group labels change, to preserve
   // the user's picks while they edit seat rows). Each option is "{n} — {label}".
@@ -106,7 +155,7 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
 
   async function onInput(): Promise<void> {
     const mine = ++token;
-    const r = parseSeatingMatrix(ta.value);
+    const r = parseSeatingMatrix(csvText);
     tables = r.tables;
     guests = r.guests;
     if (r.errors.length) {
@@ -129,7 +178,7 @@ export function mountImport(el: HTMLElement, onDone: () => void): void {
   }
 
   go.addEventListener('click', async () => {
-    const parsed = parseSeatingMatrix(ta.value);
+    const parsed = parseSeatingMatrix(csvText);
     const remapped = remapColumnsToTables(parsed, mapping);
     if (remapped.errors.length) { errorsEl.replaceChildren(...remapped.errors.map(li)); go.disabled = true; return; }
     try {

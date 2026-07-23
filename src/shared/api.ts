@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Guest, GuestMatch, SeatKey, TableInfo, Tablemate } from './types';
+import type { Guest, GuestMatch, SeatKey, TableGuest, TableInfo, Tablemate } from './types';
 import { parseSeatKey } from './types';
 import type { MatrixGuest, MatrixTable } from '../logic/matrix';
 
@@ -18,12 +18,19 @@ export const listTables = async (): Promise<TableInfo[]> =>
   unwrap(await supabase.from('tables').select('*').order('table_no'));
 export const tableGuests = async (guestId: string): Promise<Tablemate[]> =>
   unwrap(await supabase.rpc('table_guests', { p_guest_id: guestId })) ?? [];
+export const tableGuestsByTable = async (tableNo: number): Promise<TableGuest[]> =>
+  unwrap(await supabase.rpc('table_guests_by_table', { p_table_no: tableNo })) ?? [];
 export const assignSeat = async (guestId: string, seat: SeatKey): Promise<void> => {
   const { table, seat: s } = parseSeatKey(seat);
   unwrap(await supabase.rpc('assign_seat', { p_guest_id: guestId, p_table_no: table, p_seat_no: s }));
 };
 export const unseatGuest = async (guestId: string): Promise<void> => {
   unwrap(await supabase.rpc('unseat', { p_guest_id: guestId }));
+};
+export const addGuest = async (nameEn: string, nameZh: string): Promise<string> =>
+  unwrap(await supabase.rpc('add_guest', { p_name_en: nameEn, p_name_zh: nameZh }));
+export const removeGuest = async (guestId: string): Promise<void> => {
+  unwrap(await supabase.rpc('remove_guest', { p_guest_id: guestId }));
 };
 export const unseatAll = async (): Promise<number> =>
   unwrap(await supabase.rpc('unseat_all', {}));
