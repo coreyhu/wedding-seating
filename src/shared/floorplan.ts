@@ -51,8 +51,14 @@ export function zoomCappedLabelFontSize(baseSize: number, zoom: number): number 
   return (baseSize * maxScreenScale) / Math.max(maxScreenScale, zoom);
 }
 
+// Once a guest zooms in far enough to be reading individual chairs, the table
+// name stops helping and starts covering the seat ring, so we hide it. The
+// threshold sits comfortably below the zoom-to-seat target (5) so the auto
+// "find my chair" flow always lands with the label gone, while leaving room to
+// pan and browse the floorplan at a few multiples of the fitted view with the
+// table names still on screen.
 export function shouldHideTableLabels(zoom: number): boolean {
-  return zoom > 1.6;
+  return zoom > 3.5;
 }
 
 export function mountFloorplan(container: HTMLElement,

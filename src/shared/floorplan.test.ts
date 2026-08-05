@@ -26,8 +26,8 @@ it('caps host label growth after the fitted zoom level', () => {
 });
 
 it('hides guest table labels once the map is zoomed in for seat finding', () => {
-  expect(shouldHideTableLabels(1.6)).toBe(false);
-  expect(shouldHideTableLabels(1.61)).toBe(true);
+  expect(shouldHideTableLabels(3.5)).toBe(false);
+  expect(shouldHideTableLabels(3.51)).toBe(true);
 });
 
 const svgText = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
